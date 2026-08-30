@@ -52,7 +52,9 @@ Every number here comes from a run, not an estimate.
 ### What a person can do
 
 - Connect Ollama, LM Studio, or any OpenAI-compatible endpoint — including one
-  on a non-default port, choosing which runtime is listening.
+  on a non-default port, choosing which runtime is listening. Tested against a
+  stub speaking those protocols, never against the real thing; see the
+  limitations below.
 - See, for every model, **how** each capability was established: reported,
   probed, or guessed from the name.
 - Hold a streaming conversation that can be stopped, titles itself, and
@@ -75,12 +77,14 @@ Every number here comes from a run, not an estimate.
 
 ### Built artefacts
 
-| | |
-|---|---|
-| Linux `.deb` | Built here. |
-| WordPress plugin ZIP | Built here. |
-| Windows `.exe` / `.msi` | Scripted and wired into CI; **built on Windows**. |
-| macOS `.dmg` | Scripted and wired into CI; **built on macOS**. |
+Built and *run* are different claims, so they are separated here.
+
+| | Built | Installed and run |
+|---|---|---|
+| Linux `.deb` | Every release, by CI | **Yes** — installed from the published release on a clean machine, driven, and removed |
+| WordPress plugin ZIP | Every release, by CI | Tested against a relay that is really listening |
+| Windows `.exe` / `.msi` | Every release, by CI | **No. Nobody has launched it.** |
+| macOS `.dmg` | Every release, by CI | **No. Nobody has launched it.** |
 
 ## Known limitations
 
@@ -89,7 +93,8 @@ Recorded rather than omitted.
 | | |
 |---|---|
 | **Installers are unsigned.** | Windows SmartScreen warns about an unknown publisher; macOS needs right-click → Open. Signing needs certificates the project owner must buy. |
-| **Windows and macOS packages are not built in this environment.** | Tauri's bundlers need each platform's own tooling. The scripts and CI jobs exist; they have not been run on those platforms from here. |
+| **Nobody has ever launched the Windows or macOS build.** | CI builds both on every release and publishes them, and those builds succeed — but a build succeeding is not the same as an application starting. Neither installer has been run by anyone, so the first person to try one is doing something no one has done. Expect the unexpected there, and report it. |
+| **The application has never spoken to a real model runtime.** | Every test drives a stub that speaks the Ollama protocol. That exercises the wire format, not Ollama or LM Studio themselves, and a real model is slower, chattier and worse at following orchestration prompts than a stub. The multi-agent screens are the likeliest place for this to show. |
 | **AppImage fails in a minimal container** for want of `xdg-open`. | The `.deb` is unaffected. Build AppImages on a desktop Linux machine. |
 | **The relay has not been deployed to a public address.** | It runs, is tested over real HTTP, and is tested against the WordPress plugin — but nothing claims it is deployed, and no default points at one. |
 | **The relay does not send email.** | Registration returns the verification token in the response instead. This is marked in the code and must change before real users. |
