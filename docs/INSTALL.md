@@ -34,20 +34,20 @@ Knowledge screen tells you that is what is happening.
 
 ## Windows
 
-1. Download `OTWONO AI_<version>_x64-setup.exe` (or the `.msi`).
+1. Download `OTWONO.AI_<version>_x64-setup.exe` (or the `.msi`).
 2. Run it. **These builds are unsigned**, so Windows SmartScreen will warn about
    an unknown publisher. Choose *More info* → *Run anyway* if you trust where
    you got the file. Check the SHA-256 against the published checksum first:
 
    ```powershell
-   Get-FileHash -Algorithm SHA256 .\OTWONO AI_0.1.0_x64-setup.exe
+   Get-FileHash -Algorithm SHA256 .\OTWONO.AI_0.1.1_x64-setup.exe
    ```
 
 3. The installer offers a Start Menu entry and, optionally, a desktop shortcut.
 4. Launching at sign-in is **off** by default. Turn it on in Settings if you
    want it; nothing is added to your startup without being asked.
 
-Your data lives in `%APPDATA%\OTWONO AI`.
+Your data lives in `%APPDATA%\OTWONO\OTWONO AI\data`.
 
 ## macOS
 
@@ -55,16 +55,16 @@ Your data lives in `%APPDATA%\OTWONO AI`.
 2. Unsigned builds are refused on first launch. Right-click the application and
    choose *Open*, then confirm.
 
-Your data lives in `~/Library/Application Support/OTWONO AI`.
+Your data lives in `~/Library/Application Support/com.OTWONO.OTWONO-AI`.
 
 ## Linux (Debian, Ubuntu)
 
 ```bash
-sudo dpkg -i otwono-ai_0.1.0_amd64.deb
+sudo dpkg -i OTWONO.AI_0.1.1_amd64.deb
 sudo apt-get install -f      # if anything was missing
 ```
 
-Your data lives in `~/.local/share/otwono-ai`.
+Your data lives in `~/.local/share/otwonoai`.
 
 ## From source
 
@@ -98,11 +98,12 @@ Every release has a `SHA256SUMS` file. Download it into the same folder as the
 installer, then:
 
 ```bash
-sha256sum -c SHA256SUMS       # Linux, macOS
+sha256sum --ignore-missing -c SHA256SUMS      # Linux, macOS
 ```
 
-It reports `OK` for each file you downloaded, and `No such file or directory`
-for the ones you did not — that is expected, and is not a failed check.
+It reports `OK` for each file you downloaded and says nothing about the rest.
+Without `--ignore-missing` it also complains about every file in the release you
+chose not to download, and exits non-zero for them.
 
 ```powershell
 # Windows: compare this against the matching line in SHA256SUMS

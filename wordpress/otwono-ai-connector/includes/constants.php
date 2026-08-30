@@ -15,7 +15,7 @@ namespace OTWONO\Connector;
 
 defined( 'ABSPATH' ) || exit;
 
-const VERSION    = '0.1.1';
+const VERSION    = '0.1.2';
 const OPTION_KEY = 'otwono_connector_settings';
 const TOKEN_KEY  = 'otwono_connector_token';
 const SCHEMA_KEY = 'otwono_connector_schema';

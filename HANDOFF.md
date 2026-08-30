@@ -165,13 +165,13 @@ Full list in `STATUS.md`. The ones that matter to a user:
 ## 8. Clean install
 
 **Windows.** Run the `.exe` or `.msi`. SmartScreen will warn; verify the
-SHA-256 first. Data goes to `%APPDATA%\OTWONO AI`.
+SHA-256 first. Data goes to `%APPDATA%\OTWONO\OTWONO AI\data`.
 
 **macOS.** Open the `.dmg`, drag to Applications, then right-click → *Open* on
-first launch. Data goes to `~/Library/Application Support/OTWONO AI`.
+first launch. Data goes to `~/Library/Application Support/com.OTWONO.OTWONO-AI`.
 
-**Linux.** `sudo dpkg -i "OTWONO AI_0.1.0_amd64.deb"` then
-`sudo apt-get install -f`. Data goes to `~/.local/share/otwono-ai`.
+**Linux.** `sudo dpkg -i OTWONO.AI_0.1.1_amd64.deb` then
+`sudo apt-get install -f`. Data goes to `~/.local/share/otwonoai`.
 
 **Then:** install Ollama, `ollama pull llama3.1` and `ollama pull
 nomic-embed-text`, open OTWONO, Connections → *Find local runtimes* → *Use

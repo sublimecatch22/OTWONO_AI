@@ -51,6 +51,6 @@ is in it, so this is a real reset, not a partial one.
 
 | Platform | Path |
 |---|---|
-| Windows | `%APPDATA%\OTWONO AI` |
-| macOS | `~/Library/Application Support/OTWONO AI` |
-| Linux | `~/.local/share/otwono-ai` |
+| Windows | `%APPDATA%\OTWONO\OTWONO AI\data` |
+| macOS | `~/Library/Application Support/com.OTWONO.OTWONO-AI` |
+| Linux | `~/.local/share/otwonoai` |

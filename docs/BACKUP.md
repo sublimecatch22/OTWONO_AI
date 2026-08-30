@@ -5,9 +5,9 @@ backed up everything; copy it to another machine and OTWONO carries on there.
 
 | Platform | Data directory |
 |---|---|
-| Windows | `%APPDATA%\OTWONO AI` |
-| macOS | `~/Library/Application Support/OTWONO AI` |
-| Linux | `~/.local/share/otwono-ai` |
+| Windows | `%APPDATA%\OTWONO\OTWONO AI\data` |
+| macOS | `~/Library/Application Support/com.OTWONO.OTWONO-AI` |
+| Linux | `~/.local/share/otwonoai` |
 
 The exact path for your installation is on the Settings screen under
 **Your data**.

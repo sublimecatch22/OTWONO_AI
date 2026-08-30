@@ -95,9 +95,9 @@ the WordPress plugin is a presentation + transport layer over the relay API.
 SQLite (bundled — no system SQLite requirement) in the platform application data
 directory:
 
-* Windows: `%APPDATA%\OTWONO AI\`
-* macOS: `~/Library/Application Support/OTWONO AI/`
-* Linux: `~/.local/share/otwono-ai/`
+* Windows: `%APPDATA%\OTWONO\OTWONO AI\data\`
+* macOS: `~/Library/Application Support/com.OTWONO.OTWONO-AI/`
+* Linux: `~/.local/share/otwonoai/`
 
 Overridable with `OTWONO_DATA_DIR` for development and tests.
 
