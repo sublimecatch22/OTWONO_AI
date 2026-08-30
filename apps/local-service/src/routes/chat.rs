@@ -27,6 +27,7 @@ use crate::error::{ApiError, ApiResult};
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ListQuery {
     pub workspace_id: Option<String>,
     #[serde(default)]
@@ -44,6 +45,7 @@ pub async fn list(
 }
 
 #[derive(Debug, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub struct CreateConversation {
     #[serde(default)]
     pub title: String,
@@ -97,6 +99,7 @@ pub async fn get(
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct UpdateConversation {
     pub title: Option<String>,
     pub agent_id: Option<Option<String>>,
@@ -160,6 +163,7 @@ pub async fn delete(
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct TruncateRequest {
     /// Everything from this message onwards is removed.
     pub from_message_id: String,
@@ -176,6 +180,7 @@ pub async fn truncate(
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SendRequest {
     pub message: String,
     /// Override the conversation's sources for this turn.

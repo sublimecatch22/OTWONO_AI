@@ -10,6 +10,7 @@ use crate::error::ApiResult;
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct LogQuery {
     pub project_id: Option<String>,
     pub task_id: Option<String>,

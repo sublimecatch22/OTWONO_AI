@@ -80,6 +80,7 @@ pub async fn reset(State(state): State<AppState>) -> ApiResult<Json<PreferencesR
 
 /// The portable form of a user's settings.
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SettingsExport {
     pub schema_version: u32,
     pub kind: String,

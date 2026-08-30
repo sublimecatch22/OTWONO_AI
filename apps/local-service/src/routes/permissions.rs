@@ -52,6 +52,7 @@ pub async fn history(State(state): State<AppState>) -> ApiResult<Json<Vec<Grant>
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct GrantRequest {
     pub capability: String,
     #[serde(default)]
@@ -145,6 +146,7 @@ pub async fn revoke_all(State(state): State<AppState>) -> ApiResult<Json<serde_j
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ResolveRequest {
     /// "allow", "allow_once" or "deny".
     pub decision: String,
@@ -175,6 +177,7 @@ pub async fn resolve(
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CheckRequest {
     pub capability: String,
     #[serde(default)]

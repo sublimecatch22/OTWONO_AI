@@ -44,6 +44,20 @@ the guard itself, so an unknown path preflights as `404` rather than `405`.
 `message` is written to be shown to a person. `retryable` says whether trying
 again could plausibly help.
 
+### Unknown fields are refused
+
+A request body naming a field the endpoint does not have is answered `422`, and
+the error lists the fields it does accept:
+
+```
+unknown field `system_prompt`, expected one of `name`, `role`, `description`,
+`icon`, `system_instructions`, …
+```
+
+The same applies to query parameters, which answer `400`. Nothing is silently
+ignored: a misremembered field name is told to you rather than dropped behind a
+`200`. See D-016.
+
 ### Streaming
 
 `POST /api/conversations/{id}/messages` answers with `text/event-stream`. The

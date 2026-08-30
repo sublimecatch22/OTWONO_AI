@@ -64,6 +64,7 @@ pub async fn status(State(state): State<AppState>) -> ApiResult<Json<SystemStatu
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct EmergencyStopRequest {
     pub engaged: bool,
     /// When engaging, also revoke every standing permission.

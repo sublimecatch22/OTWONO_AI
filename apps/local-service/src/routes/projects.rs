@@ -16,6 +16,7 @@ use crate::error::{ApiError, ApiResult};
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ListQuery {
     pub workspace_id: Option<String>,
 }
@@ -54,6 +55,7 @@ pub async fn list(
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CreateProject {
     pub title: String,
     #[serde(default)]
@@ -136,6 +138,7 @@ pub async fn get(
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct UpdateProject {
     pub title: Option<String>,
     pub objective: Option<String>,
@@ -204,6 +207,7 @@ pub async fn delete(
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct TransitionRequest {
     pub state: String,
 }
@@ -222,6 +226,7 @@ pub async fn transition(
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AddTask {
     pub title: String,
     #[serde(default)]
@@ -324,6 +329,7 @@ pub async fn run(
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ApprovalDecision {
     pub approve: bool,
     #[serde(default)]

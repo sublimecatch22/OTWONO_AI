@@ -18,6 +18,7 @@ use crate::error::{ApiError, ApiResult};
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ListQuery {
     pub workspace_id: Option<String>,
     #[serde(default)]
@@ -72,6 +73,7 @@ pub async fn seed_templates(State(state): State<AppState>) -> ApiResult<Json<Vec
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CreateAgent {
     pub name: String,
     #[serde(default)]
@@ -202,6 +204,7 @@ pub async fn get(State(state): State<AppState>, Path(id): Path<String>) -> ApiRe
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct UpdateAgent {
     pub name: Option<String>,
     pub role: Option<String>,
@@ -357,6 +360,7 @@ pub async fn export(
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ImportRequest {
     pub package: AgentPackage,
     #[serde(default)]
@@ -379,6 +383,7 @@ pub async fn import(
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct TestRequest {
     pub message: String,
     /// Override the agent's model for this one run.

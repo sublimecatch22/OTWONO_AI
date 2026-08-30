@@ -62,6 +62,7 @@ pub async fn list_sources(State(state): State<AppState>) -> ApiResult<Json<Sourc
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AuthoriseRequest {
     pub path: String,
     #[serde(default)]
@@ -113,6 +114,7 @@ pub async fn authorise(
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AuthorisationChange {
     pub authorised: bool,
 }
@@ -215,6 +217,7 @@ pub async fn documents(
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SearchRequest {
     pub query: String,
     /// Sources to search. Empty means "nothing", never "everything".
@@ -256,6 +259,7 @@ pub async fn search(
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct BrowseQuery {
     pub path: Option<String>,
 }
