@@ -95,9 +95,8 @@ thing either way.
 
 **From the Actions tab.** *Actions → Release → Run workflow*, and give it a
 version such as `0.1.0`. Nothing has to be tagged first: the release step
-creates the tag when it drafts the release, against the commit the run started
-from. This is the route to use when you cannot push to `refs/tags/*` — a
-ruleset restricting tag creation, or a token without the rights.
+creates the tag as it publishes the release, against the commit the run
+started from. This is the route to use when you cannot push to `refs/tags/*`.
 
 **By pushing a tag** matching `v*`, if you would rather the tag came first.
 
@@ -115,7 +114,14 @@ that is not a version, and a version that disagrees with `Cargo.toml`. The
 second is the one worth having — it stops a release being labelled `0.2.0`
 while every binary inside it reports `0.1.0`.
 
-The release is left as a **draft**. Publishing it is a person's decision.
+**The release is published, not drafted.** A draft holds the tag name without
+creating the ref, so the tag only exists once someone publishes by hand — and
+that step turned out to be an unreliable place to leave a release stranded.
+Starting the run is the deliberate act instead: `verify` has to pass before
+anything is built, and someone has to press the button.
+
+If you would rather review before it goes public, set `draft: true` on the
+release step and publish from the Releases page.
 
 ## Version numbers
 
