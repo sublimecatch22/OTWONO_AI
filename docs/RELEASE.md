@@ -154,10 +154,14 @@ Say what changed, what is known to be limited, and anything a user must do by
 hand when upgrading. If a migration runs, say so and say that a backup is taken
 first. Do not describe as finished anything that has not been run.
 
+`RELEASE_NOTES.md` **is** the release page: the workflow publishes it as the
+body, so whatever it says is what someone sees when they arrive to download.
+Write it for that reader, not for someone already in the repository.
+
 ## The checklist
 
 - [ ] `./scripts/verify.sh` passes
-- [ ] Versions agree in all three files (`prepare` checks this too, but finding
+- [ ] Versions agree in all nine files (`prepare` checks this too, but finding
       out here is cheaper than finding out on a runner)
 - [ ] `RELEASE_NOTES.md` written
 - [ ] Linux `.deb` built and installed once on a clean machine
