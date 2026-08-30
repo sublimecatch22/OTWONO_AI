@@ -1,51 +1,43 @@
-# OTWONO AI 0.1.3
+# OTWONO AI 0.1.4
 
-The first release since 0.1.0 that changes how the application behaves. 0.1.1
-and 0.1.2 were packaging and documentation fixes; this one alters what the
-local API does with a request it does not fully understand.
+**No code changed.** Not one line of the application differs from 0.1.3 except
+the version string it reports. (The binaries are not byte-identical — these
+builds are not reproducible — but the source they were built from is.) There is
+no reason to upgrade for behaviour, and nothing is lost by not doing so.
+
+It exists because `STATUS.md` was describing this project more favourably than
+the facts support, and that document is now published rather than only sitting
+in the repository.
 
 ---
 
 ## What changed
 
-**A request naming a field the endpoint does not have is now refused.**
+**`STATUS.md` now separates *built* from *run*.** It used to list the Windows
+and macOS packages as "scripted and wired into CI", which undersold what happens
+— CI builds and publishes both on every release — while hiding what does not:
 
-Before this release, creating an agent with `system_prompt` instead of
-`system_instructions` returned `200` and an agent whose instructions were empty
-and whose temperature was the default. The request was accepted, the intent was
-discarded, and a success code was put on top of it. Serde ignores what it
-cannot place, and every request type in the service inherited that.
-
-Now the same request answers `422` and says what it accepts:
-
-```
-unknown field `system_prompt`, expected one of `name`, `role`, `description`,
-`icon`, `system_instructions`, `provider_connection_id`, `model`, `parameters`, …
-```
-
-All 53 request types in the local service are covered.
-
-**This extends to the import formats, deliberately.** A settings file
-containing a key this version cannot apply is refused rather than partly
-applied. Telling someone their settings were restored while quietly discarding
-part of the file is the worse failure. Both the settings export and the agent
-package carry `schema_version`, so a genuinely newer file is refused by an
-explicit version check rather than being mangled.
-
-## If you script against the API, read this
-
-Two things that used to be silently tolerated are now errors:
-
-| | Before | Now |
+| | Built | Installed and run |
 |---|---|---|
-| Unknown field in a request body | ignored, `200` | `422`, naming the field and listing the valid ones |
-| Unknown query parameter | ignored | `400` |
+| Linux `.deb` | Every release, by CI | **Yes** — installed from the published release on a clean machine, driven, and removed |
+| WordPress plugin ZIP | Every release, by CI | Tested against a relay that is really listening |
+| Windows `.exe` / `.msi` | Every release, by CI | **No. Nobody has launched it.** |
+| macOS `.dmg` | Every release, by CI | **No. Nobody has launched it.** |
 
-Nothing the shipped interface sends is affected — the end-to-end suite drives
-the real interface against the real service and passes unchanged. This matters
-only if you are calling the API yourself.
+A build succeeding is not an application starting. If you are on Windows or
+macOS, you are the first person to run this, and it would be useful to hear what
+happens.
 
-The reasoning, and the cost, are recorded as decision D-016.
+**It also now records that the application has never spoken to a real model
+runtime.** Every test drives a stub that speaks the Ollama protocol. That
+exercises the wire format, not Ollama or LM Studio themselves, and a real model
+is slower, chattier and worse at following orchestration prompts than a stub —
+the multi-agent screens are the likeliest place for that to show. The claim
+under "What a person can do" now says so rather than reading as though it had
+been tried.
+
+The limitation that said those packages "are not built in this environment" is
+gone; it stopped being true when the release workflow started building them.
 
 ## Verifying this download
 
@@ -65,14 +57,13 @@ install OTWONO, and connect it on the Connections screen.
 - **The installers are unsigned.** Windows SmartScreen will warn about an
   unknown publisher; macOS needs right-click → *Open* on first launch. Signing
   needs certificates the project owner must buy.
+- **Nobody has launched the Windows or macOS build.** See above.
+- **The application has never spoken to a real Ollama or LM Studio.** See above.
 - **Marketplace payments are simulated.** Nothing holds or moves money.
 - **No relay is deployed.** The relay runs and is tested, but no public
   instance exists and nothing in the product points at one.
 - **Without an embedding model**, search matches words rather than meaning. The
   interface says so where it matters.
-- **Windows and macOS have not been run by anyone.** Both are built by CI and
-  both builds succeed, but no one has installed or launched them. Only the
-  Linux `.deb` has been installed and driven from a published release.
 
 Full detail in `STATUS.md`.
 
@@ -88,9 +79,10 @@ Full detail in `STATUS.md`.
 
 `./scripts/verify.sh` runs all of it, plus formatting, types and lints.
 
-The 0.1.2 `.deb` was installed and driven from the published release on a clean
-machine: checksums verified, `dpkg -i` clean with no unmet dependencies, first
-run usable in two seconds, ten agents seeded, a folder authorised and indexed,
-and retrieval returning the right file for two different queries. Everything
-survived a restart. `dpkg -r` removed the program and left the user's data
-intact. That run is what found the defect this release fixes.
+The 0.1.3 `.deb` was installed and driven from the published release on a clean
+machine: checksums verified, `dpkg -i` clean, `/health` reporting 0.1.3, a
+request naming a field the endpoint does not have refused with `422`, the
+correct field accepted with `200`, an unknown query parameter refused with
+`400`, no token refused with `401`, a hostile `Origin` refused with `403`, and
+the service listening on loopback only. That is the same binary this release
+ships.
