@@ -3,7 +3,7 @@
 What is built, what is not, and what is known to be limited. Updated at the end
 of each phase.
 
-**Version 0.1.1** · Last updated at the end of Phase 6.
+**Version 0.1.2** · Last updated at the end of Phase 6.
 
 ---
 
@@ -13,8 +13,8 @@ Every number here comes from a run, not an estimate.
 
 | Suite | Command | Result |
 |---|---|---|
-| Rust — 9 crates | `cargo test --workspace` | **495 passing** |
-| Frontend | `npm run test` | **18 passing** |
+| Rust — 9 crates | `cargo test --workspace` | **496 passing** |
+| Frontend | `npm run test` | **25 passing** |
 | WordPress plugin | `php wordpress/tests/run-tests.php` | **28 passing** |
 | WordPress against a live relay | `./scripts/run-wordpress-live-tests.sh` | **6 passing** |
 | End to end | `npx playwright test` | **15 passing** |
