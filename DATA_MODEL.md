@@ -8,9 +8,9 @@ Everything OTWONO knows is in one SQLite database:
 
 | Platform | Data directory |
 |---|---|
-| Windows | `%APPDATA%\OTWONO AI` |
-| macOS | `~/Library/Application Support/OTWONO AI` |
-| Linux | `~/.local/share/otwono-ai` |
+| Windows | `%APPDATA%\OTWONO\OTWONO AI\data` |
+| macOS | `~/Library/Application Support/com.OTWONO.OTWONO-AI` |
+| Linux | `~/.local/share/otwonoai` |
 
 `OTWONO_DATA_DIR` overrides it, which is how the tests and portable
 installations work. Alongside the database the directory holds `backups/`,

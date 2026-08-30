@@ -11,9 +11,12 @@ pub const DATA_DIR_ENV: &str = "OTWONO_DATA_DIR";
 /// Root directory for everything the user owns: database, backups, attachments,
 /// project artefacts, exports and the encrypted vault fallback.
 ///
-/// * Windows: `%APPDATA%\OTWONO AI`
-/// * macOS: `~/Library/Application Support/OTWONO AI`
-/// * Linux: `~/.local/share/otwono-ai`
+/// Derived from `ProjectDirs::from("com", "OTWONO", "OTWONO AI")`, so the
+/// spelling differs per platform and is not ours to choose:
+///
+/// * Windows: `%APPDATA%\OTWONO\OTWONO AI\data`
+/// * macOS: `~/Library/Application Support/com.OTWONO.OTWONO-AI`
+/// * Linux: `~/.local/share/otwonoai`
 pub fn data_dir() -> Result<PathBuf> {
     if let Some(raw) = std::env::var_os(DATA_DIR_ENV) {
         let path = PathBuf::from(raw);
@@ -114,6 +117,22 @@ mod tests {
             assert_eq!(data_dir().unwrap(), tmp.path());
             assert_eq!(database_path().unwrap(), tmp.path().join("otwono.sqlite3"));
         });
+    }
+
+    /// The documented data directory is not a free choice: it comes out of
+    /// `directories`, and the docs, the backup guide and the uninstall
+    /// instructions all quote it. Pin the one platform this suite runs on so a
+    /// crate upgrade cannot silently move a user's data while the prose keeps
+    /// pointing at the old place.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn the_documented_linux_directory_is_the_one_we_actually_use() {
+        let dirs = directories::ProjectDirs::from("com", "OTWONO", "OTWONO AI").unwrap();
+        assert!(
+            dirs.data_dir().ends_with("otwonoai"),
+            "docs say ~/.local/share/otwonoai but the crate gives {}",
+            dirs.data_dir().display()
+        );
     }
 
     #[test]
