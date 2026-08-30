@@ -94,14 +94,19 @@ packages Tauri lists for your distribution.
 
 ## Verifying a download
 
-Every release folder has a `SHA256SUMS` file.
+Every release has a `SHA256SUMS` file. Download it into the same folder as the
+installer, then:
 
 ```bash
 sha256sum -c SHA256SUMS       # Linux, macOS
 ```
 
+It reports `OK` for each file you downloaded, and `No such file or directory`
+for the ones you did not — that is expected, and is not a failed check.
+
 ```powershell
-Get-FileHash -Algorithm SHA256 .\<file>   # Windows
+# Windows: compare this against the matching line in SHA256SUMS
+Get-FileHash -Algorithm SHA256 .\<file>
 ```
 
 ## Uninstalling

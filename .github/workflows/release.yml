@@ -178,6 +178,17 @@ jobs:
           mkdir -p release
           find downloaded -type f -exec cp {} release/ \;
           cd release
+
+          # GitHub replaces spaces with dots in an asset's filename as it
+          # uploads. Renaming first means `SHA256SUMS` names the files as they
+          # are actually served, so `sha256sum -c SHA256SUMS` works on a
+          # downloaded release instead of failing on every line.
+          for file in *; do
+            case "$file" in
+              *\ *) mv -- "$file" "${file// /.}" ;;
+            esac
+          done
+
           sha256sum * > SHA256SUMS
           cat SHA256SUMS
       - uses: actions/upload-artifact@v4
