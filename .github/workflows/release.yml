@@ -2,8 +2,8 @@ name: Release
 
 on:
   # Two ways in. A tag is the tidier record, but pressing the button in the
-  # Actions tab needs no push rights over `refs/tags/*`, and the release step
-  # creates the tag itself when it drafts the release.
+  # Actions tab needs no push rights over `refs/tags/*`: the release step
+  # creates the tag itself, as part of publishing the release.
   push:
     tags: ['v*']
   workflow_dispatch:
@@ -184,15 +184,15 @@ jobs:
         with:
           name: release
           path: release/
-      # Left as a draft on purpose: publishing is a person's decision.
-      #
-      # When the tag does not exist yet — which is the case every time this is
-      # started from the Actions tab — creating the release creates it, against
-      # the commit this run was started from.
-      - name: Draft the GitHub release
+      # Published rather than drafted. A draft holds the tag name without
+      # creating the ref, so `v0.1.0` only comes into existence at the moment
+      # the release is published — and publishing by hand proved unreliable.
+      # Starting this run is the deliberate act; the review happens before it,
+      # in `verify` and in whoever pressed the button.
+      - name: Publish the GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          draft: true
+          draft: false
           tag_name: ${{ needs.prepare.outputs.tag }}
           name: OTWONO AI ${{ needs.prepare.outputs.version }}
           target_commitish: ${{ github.sha }}
