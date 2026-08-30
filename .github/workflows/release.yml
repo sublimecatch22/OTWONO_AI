@@ -39,11 +39,28 @@ jobs:
           fi
 
           # Refuse to label a release with a version the code does not claim.
-          declared="$(grep -m1 '^version' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')"
-          if [ "$version" != "$declared" ]; then
-            echo "::error::Asked to release $version, but Cargo.toml says $declared. \
-          Update the version in Cargo.toml, apps/desktop/src-tauri/tauri.conf.json and \
-          wordpress/otwono-ai-connector/otwono-ai-connector.php first."
+          # Every file that states a version is checked, not just one: a half
+          # finished bump would otherwise ship installers reporting the old
+          # version under a release named for the new one.
+          fail=0
+          check() {
+            found="$(grep -m1 "$2" "$1" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+            if [ "$found" != "$version" ]; then
+              echo "::error file=$1::$1 says ${found:-nothing}, but this release is $version."
+              fail=1
+            fi
+          }
+          check Cargo.toml '^version'
+          check apps/desktop/src-tauri/tauri.conf.json '"version"'
+          check package.json '"version"'
+          check apps/desktop/package.json '"version"'
+          check apps/web/package.json '"version"'
+          check packages/ui/package.json '"version"'
+          check wordpress/otwono-ai-connector/otwono-ai-connector.php 'Version:'
+          check wordpress/otwono-ai-connector/includes/constants.php 'VERSION'
+          check wordpress/otwono-ai-connector/readme.txt 'Stable tag:'
+          if [ "$fail" -ne 0 ]; then
+            echo "::error::Bump every file above to $version before releasing it."
             exit 1
           fi
 

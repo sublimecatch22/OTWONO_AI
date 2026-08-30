@@ -1,91 +1,75 @@
-# OTWONO AI 0.1.0
+# OTWONO AI 0.1.1
 
-The first release. A local-first AI work platform that runs on your own
-machine, against models you choose, with your files staying where they are.
+A packaging fix. **The application itself is unchanged from 0.1.0** — same
+features, same behaviour. If 0.1.0 is working for you there is no need to
+upgrade, though nothing is lost by doing so.
 
 ---
 
-## What is in it
+## What changed
 
-**Chat** against a local model, streaming, stoppable, with citations when an
-answer used your files. Conversations title themselves and survive a restart.
+**`sha256sum -c SHA256SUMS` now works.** GitHub replaces spaces with dots in an
+asset's filename as it uploads, so 0.1.0's checksum file named
+`OTWONO AI_0.1.0_amd64.deb` while the release actually served
+`OTWONO.AI_0.1.0_amd64.deb`. Anyone following the verification step in
+`docs/INSTALL.md` got:
 
-**Agents** — ten templates to copy and edit. Each is instructions, a model and
-a narrow list of things it is allowed to do. Every edit records a version. An
-exported package **can never contain a credential**.
+```
+sha256sum: 'OTWONO AI_0.1.0_amd64.deb': No such file or directory
+OTWONO AI_0.1.0_amd64.deb: FAILED open or read
+```
 
-**Knowledge** — folders you authorise are indexed on this machine. Nothing is
-uploaded. Hybrid retrieval, and every hit carries the file name and a place in
-it. Revoking a folder deletes its index immediately.
+The hashes were correct; only the names disagreed. The release now names the
+files as they are served, so the check passes.
 
-**Projects** — describe an outcome, read the plan before anything runs, approve
-it, and have each task checked against your criteria. Without a verifier,
-finished work is reported as *unchecked*, never as passed.
+**The release build refuses a half-finished version bump.** Nine files state
+the version. If any of them disagrees with the version being released, the
+build stops before anything is compiled, rather than producing installers that
+report one number under a release named for another.
 
-**Workspaces** — Offices, Labs, Boardrooms and Think Tanks. A session reports
-the synthesis **and the dissent**.
+**`docs/INSTALL.md`** now says that a `No such file` line for a platform you
+did not download is expected, not a failed check.
 
-**Marketplace (development preview)** — post work for a person to do.
-**Payments are simulated**: no money moves, and every screen says so.
-Moderation refuses prohibited work, names the phrase that matched, and offers a
-route to a person.
+## Verifying this download
 
-**Optional account and WordPress plugin** — pair a site with a single-use code;
-members sign in and see what you published. Synchronisation sends the title and
-state of projects you ticked, when you press the button, and shows a receipt of
-exactly what left the machine.
+```bash
+sha256sum -c SHA256SUMS
+```
+
+Files you downloaded report `OK`. Files you did not report `No such file or
+directory` — that is expected.
 
 ## Installing
 
 See `docs/INSTALL.md`. In short: install Ollama or LM Studio, pull a model,
 install OTWONO, and connect it on the Connections screen.
 
-**Verify your download** against `SHA256SUMS` before running it.
-
 ## Please read
 
 - **The installers are unsigned.** Windows SmartScreen will warn about an
   unknown publisher; macOS needs right-click → *Open* on first launch. Signing
   needs certificates the project owner must buy.
-- **Marketplace payments are simulated.** Nothing holds or moves money, and
-  there is no payment integration to enable.
+- **Marketplace payments are simulated.** Nothing holds or moves money.
 - **No relay is deployed.** The relay runs and is tested, but no public
-  instance exists and nothing in the product points at one. WordPress sign-in
-  needs you to deploy your own.
+  instance exists and nothing in the product points at one.
 - **Without an embedding model**, search matches words rather than meaning. The
   interface says so where it matters.
 
-## Privacy
-
-No telemetry. No training on your data. No account required, and no cloud
-service behind it. Everything OTWONO knows is in one folder you can copy or
-delete; the path is on the Settings screen.
-
-The only ways anything leaves your machine are a provider connection you
-pointed off-device, an `http_fetch` grant limited to hosts you approved, and a
-synchronisation you triggered. See `SECURITY.md`.
-
-## Upgrading
-
-Install over the top. A backup is taken before any schema change, migrations
-run in a transaction, and a database written by a newer version is refused
-rather than downgraded. See `docs/UPGRADE.md`.
-
-## Known limitations
-
-Listed in full in `STATUS.md`. The main ones: unsigned installers; no deployed
-relay; the relay does not send email, so registration returns the verification
-token in the response instead; the marketplace is a preview; one operating-system
-account per installation.
+Full detail in `STATUS.md`.
 
 ## Verified before release
 
 | | |
 |---|---|
 | Rust, 9 crates | 495 tests |
-| Frontend | 18 tests |
-| WordPress plugin | 28 tests |
-| WordPress against a live relay | 6 tests |
-| End to end, against the real service | 15 tests |
+| Frontend | 18 |
+| WordPress plugin | 28 |
+| WordPress against a live relay | 6 |
+| End to end, against the real service | 15 |
 
 `./scripts/verify.sh` runs all of it, plus formatting, types and lints.
+
+The 0.1.0 `.deb` was also installed and run from the published release: it
+installs cleanly, starts, seeds its agents, serves `/health` unauthenticated,
+refuses `/api` without a token, refuses a hostile `Origin` even with one, and
+listens on loopback only.
