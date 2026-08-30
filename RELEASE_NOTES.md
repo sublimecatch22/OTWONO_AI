@@ -1,39 +1,51 @@
-# OTWONO AI 0.1.2
+# OTWONO AI 0.1.3
 
-A documentation fix. **The application itself is unchanged from 0.1.0** — same
-features, same behaviour. Upgrade only if you want the corrected instructions;
-nothing in the running product differs.
+The first release since 0.1.0 that changes how the application behaves. 0.1.1
+and 0.1.2 were packaging and documentation fixes; this one alters what the
+local API does with a request it does not fully understand.
 
 ---
 
 ## What changed
 
-**The documented data directory was wrong on all three platforms.** The path
-comes from `ProjectDirs::from("com", "OTWONO", "OTWONO AI")`, and the
-`directories` crate spells that differently per platform. The documentation
-quoted a hand-written guess instead of what the code produces:
+**A request naming a field the endpoint does not have is now refused.**
 
-| | Documented | Actual |
+Before this release, creating an agent with `system_prompt` instead of
+`system_instructions` returned `200` and an agent whose instructions were empty
+and whose temperature was the default. The request was accepted, the intent was
+discarded, and a success code was put on top of it. Serde ignores what it
+cannot place, and every request type in the service inherited that.
+
+Now the same request answers `422` and says what it accepts:
+
+```
+unknown field `system_prompt`, expected one of `name`, `role`, `description`,
+`icon`, `system_instructions`, `provider_connection_id`, `model`, `parameters`, …
+```
+
+All 53 request types in the local service are covered.
+
+**This extends to the import formats, deliberately.** A settings file
+containing a key this version cannot apply is refused rather than partly
+applied. Telling someone their settings were restored while quietly discarding
+part of the file is the worse failure. Both the settings export and the agent
+package carry `schema_version`, so a genuinely newer file is refused by an
+explicit version check rather than being mangled.
+
+## If you script against the API, read this
+
+Two things that used to be silently tolerated are now errors:
+
+| | Before | Now |
 |---|---|---|
-| Windows | `%APPDATA%\OTWONO AI` | `%APPDATA%\OTWONO\OTWONO AI\data` |
-| macOS | `~/Library/Application Support/OTWONO AI` | `~/Library/Application Support/com.OTWONO.OTWONO-AI` |
-| Linux | `~/.local/share/otwono-ai` | `~/.local/share/otwonoai` |
+| Unknown field in a request body | ignored, `200` | `422`, naming the field and listing the valid ones |
+| Unknown query parameter | ignored | `400` |
 
-This mattered most in `docs/BACKUP.md`: following it meant copying a directory
-that does not exist and believing your work was safe. It was wrong in eight
-documents and in the source comment they were copied from. A test now pins the
-path so a dependency upgrade cannot move your data while the prose keeps
-pointing at the old place.
+Nothing the shipped interface sends is affected — the end-to-end suite drives
+the real interface against the real service and passes unchanged. This matters
+only if you are calling the API yourself.
 
-**The installer filenames in `docs/INSTALL.md` were stale.** They still used
-the space-separated names that 0.1.1 replaced with dots, so
-`sudo dpkg -i otwono-ai_0.1.0_amd64.deb` named a file no release has ever
-served. They now match what the release actually publishes.
-
-**The checksum command needed a flag.** `sha256sum -c SHA256SUMS` exits
-non-zero over every file in the release you chose not to download. The
-documented command is now `sha256sum --ignore-missing -c SHA256SUMS`, which
-reports `OK` for what you have and stays quiet about the rest.
+The reasoning, and the cost, are recorded as decision D-016.
 
 ## Verifying this download
 
@@ -68,7 +80,7 @@ Full detail in `STATUS.md`.
 
 | | |
 |---|---|
-| Rust, 9 crates | 496 tests |
+| Rust, 9 crates | 500 tests |
 | Frontend | 25 |
 | WordPress plugin | 28 |
 | WordPress against a live relay | 6 |
@@ -76,10 +88,9 @@ Full detail in `STATUS.md`.
 
 `./scripts/verify.sh` runs all of it, plus formatting, types and lints.
 
-The 0.1.1 `.deb` was installed and run from the published release: it installs
-cleanly, starts, migrates to schema 2, seeds its ten agents, serves `/health`
-unauthenticated, refuses `/api` without a token, refuses a hostile `Origin`
-even with a valid token, and listens on loopback only. Its published
-`SHA256SUMS` verifies against the published files — the fix 0.1.1 existed to
-make. The corrected instructions in this release were then run verbatim
-against those same files.
+The 0.1.2 `.deb` was installed and driven from the published release on a clean
+machine: checksums verified, `dpkg -i` clean with no unmet dependencies, first
+run usable in two seconds, ten agents seeded, a folder authorised and indexed,
+and retrieval returning the right file for two different queries. Everything
+survived a restart. `dpkg -r` removed the program and left the user's data
+intact. That run is what found the defect this release fixes.
