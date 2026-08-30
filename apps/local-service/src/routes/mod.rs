@@ -252,3 +252,57 @@ pub fn api_router() -> Router<AppState> {
         .route("/activity", get(activity::list))
         .route("/activity/export", get(activity::export))
 }
+
+#[cfg(test)]
+mod strictness_tests {
+    //! Every request body refuses fields it does not know.
+    //!
+    //! Serde's default is to ignore what it cannot place, so a caller who
+    //! misremembers a field name gets a cheerful 200 and a record that quietly
+    //! does not say what they asked for. These are the exact mistakes that
+    //! behaviour hid during a manual run against a published build.
+
+    fn rejects<'a, T: serde::Deserialize<'a>>(body: &'a str) -> String {
+        match serde_json::from_str::<T>(body) {
+            Ok(_) => panic!("an unknown field was accepted: {body}"),
+            Err(e) => e.to_string(),
+        }
+    }
+
+    #[test]
+    fn creating_an_agent_refuses_a_misremembered_prompt_field() {
+        // The field is `system_instructions`; `system_prompt` is the obvious
+        // wrong guess, and used to be silently dropped.
+        let message = rejects::<super::agents::CreateAgent>(
+            r#"{"name":"A","system_prompt":"you are helpful"}"#,
+        );
+        assert!(
+            message.contains("system_prompt"),
+            "the error must name the offending field, said: {message}"
+        );
+    }
+
+    #[test]
+    fn sending_a_chat_message_refuses_a_misremembered_body_field() {
+        // The field is `message`; `content` is the wrong guess.
+        rejects::<super::chat::SendRequest>(r#"{"message":"hi","content":"hi"}"#);
+    }
+
+    #[test]
+    fn a_correct_body_is_still_accepted() {
+        serde_json::from_str::<super::chat::SendRequest>(r#"{"message":"hi"}"#).unwrap();
+        serde_json::from_str::<super::agents::CreateAgent>(
+            r#"{"name":"A","system_instructions":"you are helpful"}"#,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn the_settings_import_format_refuses_a_field_it_cannot_apply() {
+        // Silently dropping here would tell someone their settings were
+        // restored when part of the file was thrown away.
+        rejects::<super::settings::SettingsExport>(
+            r#"{"schema_version":1,"kind":"otwono.settings","exported_at":"","app_version":"","preferences":{},"telemetry":true}"#,
+        );
+    }
+}

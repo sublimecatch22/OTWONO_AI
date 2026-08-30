@@ -130,3 +130,24 @@ a PDF that is not a PDF, an embedding call that failed — is recorded as
 *failed*.
 **Why:** Both are reported, so nothing disappears silently, but an error badge
 against a blank file tells the user something is wrong when nothing is.
+
+## D-016 — Request bodies refuse fields they do not recognise
+**Spec reference:** §5 "prioritise security and data integrity"; §2 "do not
+pretend something worked when it did not."
+**Decision:** Every request struct the local service deserialises carries
+`#[serde(deny_unknown_fields)]`. A body naming a field the endpoint does not
+have is answered 422, and the error lists the fields it does accept.
+**Why:** Serde's default is to ignore what it cannot place. Creating an agent
+with `system_prompt` instead of `system_instructions` returned 200 and an agent
+whose instructions were empty and whose temperature was the default — the
+caller's intent silently discarded, with a success code on top. That was found
+by driving a published build by hand, not by any test, which is the point: a
+silent wrong answer leaves nothing to find. The same reasoning covers the
+import formats. Refusing a settings file with an unrecognised key is better
+than telling someone their settings were restored while part of the file was
+thrown away; both formats carry `schema_version`, so a genuinely newer file is
+refused by an explicit version check rather than being quietly mangled.
+**Cost, accepted:** An unknown query parameter is now a 400 rather than being
+ignored, and a client sending a field the endpoint dropped in a later version
+gets an error instead of silence. For an API on loopback, driven by the
+interface shipped beside it, a loud failure is worth more than a lenient one.

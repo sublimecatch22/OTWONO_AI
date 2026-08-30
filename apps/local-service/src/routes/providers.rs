@@ -79,6 +79,7 @@ pub async fn detect_runtimes(State(state): State<AppState>) -> ApiResult<Json<De
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CreateConnection {
     pub kind: String,
     pub label: String,
@@ -139,6 +140,7 @@ pub async fn create(
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct UpdateConnection {
     pub label: Option<String>,
     pub endpoint: Option<String>,

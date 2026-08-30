@@ -44,6 +44,7 @@ pub async fn list(State(state): State<AppState>) -> ApiResult<Json<BudgetsRespon
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CreateBudget {
     pub name: String,
     #[serde(default)]
@@ -103,6 +104,7 @@ pub async fn get(
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RecordExpense {
     #[serde(default = "default_category")]
     pub category: String,
@@ -160,6 +162,7 @@ pub async fn record_expense(
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ExpenseDecision {
     pub approve: bool,
 }
@@ -196,6 +199,7 @@ pub async fn decide_expense(
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ReceiptRequest {
     pub receipt_path: String,
 }

@@ -20,6 +20,7 @@ use crate::error::{ApiError, ApiResult};
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ListQuery {
     pub kind: Option<String>,
     #[serde(default)]
@@ -86,6 +87,7 @@ pub async fn kinds() -> Json<Vec<KindDescription>> {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CreateWorkspace {
     pub kind: String,
     pub name: String,
@@ -178,6 +180,7 @@ pub async fn get(
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct UpdateWorkspace {
     pub name: Option<String>,
     pub description: Option<String>,
@@ -237,6 +240,7 @@ pub async fn delete(
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct DuplicateRequest {
     pub name: String,
 }
@@ -253,6 +257,7 @@ pub async fn duplicate(
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AddMember {
     pub agent_id: String,
     #[serde(default)]
@@ -294,6 +299,7 @@ pub async fn remove_member(
 // ---- sessions
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CreateSession {
     pub question: String,
     #[serde(default)]
@@ -368,6 +374,7 @@ pub async fn run_session(
 // ---- lab experiments
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CreateExperiment {
     pub name: String,
     pub prompt: String,
@@ -412,6 +419,7 @@ pub async fn run_experiment(
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PromoteRequest {
     pub variant_id: String,
     pub target_agent_id: String,

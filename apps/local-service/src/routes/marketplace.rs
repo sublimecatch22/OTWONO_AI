@@ -37,6 +37,7 @@ const MESSAGES_PER_HOUR: u32 = 120;
 const HOUR: i64 = 3_600;
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct BrowseQuery {
     #[serde(default)]
     pub limit: Option<u32>,
@@ -59,6 +60,7 @@ pub async fn browse(
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct MyWorkQuery {
     #[serde(default)]
     pub worker_account_id: Option<String>,
@@ -111,6 +113,7 @@ pub async fn my_listings(State(state): State<AppState>) -> ApiResult<Json<MyList
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CreateListing {
     pub title: String,
     #[serde(default)]
@@ -260,6 +263,7 @@ pub async fn get_listing(
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct StateChange {
     pub state: String,
 }
@@ -278,6 +282,7 @@ pub async fn transition_listing(
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ApplyRequest {
     pub proposal: String,
     #[serde(default)]
@@ -309,6 +314,7 @@ pub async fn apply(
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AssignRequest {
     pub application_id: String,
 }
@@ -325,6 +331,7 @@ pub async fn assign(
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct MessageRequest {
     pub body: String,
     #[serde(default)]
@@ -352,6 +359,7 @@ pub async fn post_message(
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SubmitRequest {
     pub summary: String,
     #[serde(default)]
@@ -383,6 +391,7 @@ pub async fn submit(
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ReviewRequest {
     /// "accept", "request_revision" or "dispute".
     pub decision: String,
@@ -483,6 +492,7 @@ pub async fn ledger(
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ReportRequest {
     pub reason: String,
     #[serde(default)]

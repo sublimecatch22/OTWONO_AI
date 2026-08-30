@@ -42,6 +42,7 @@ pub async fn status(State(state): State<AppState>) -> ApiResult<Json<AccountStat
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PairingRequest {
     #[serde(default)]
     pub scopes: Vec<String>,
@@ -91,6 +92,7 @@ pub async fn create_pairing_code(
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RedeemRequest {
     pub code: String,
     /// The site redeeming the code, recorded for the audit log.
@@ -127,6 +129,7 @@ pub async fn redeem_pairing_code(
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct LinkRequest {
     pub relay_base_url: String,
     #[serde(default)]
