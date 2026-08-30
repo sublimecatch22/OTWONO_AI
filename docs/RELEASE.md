@@ -125,13 +125,25 @@ release step and publish from the Releases page.
 
 ## Version numbers
 
-Three files must agree:
+Nine files state the version, and `prepare` refuses to build unless they all
+agree with the version being released — a half-finished bump would otherwise
+ship installers reporting the old number under a release named for the new one.
 
 | | |
 |---|---|
 | `Cargo.toml` | `[workspace.package] version` |
 | `apps/desktop/src-tauri/tauri.conf.json` | `version` |
+| `package.json` | `version` |
+| `apps/desktop/package.json` | `version` |
+| `apps/web/package.json` | `version` |
+| `packages/ui/package.json` | `version` |
 | `wordpress/otwono-ai-connector/otwono-ai-connector.php` | `Version:` header |
+| `wordpress/otwono-ai-connector/includes/constants.php` | `VERSION` |
+| `wordpress/otwono-ai-connector/readme.txt` | `Stable tag:` |
+
+Regenerate the lockfiles afterwards — `cargo update --workspace` and
+`npm install --package-lock-only` — because the workspace crates and packages
+are versioned too.
 
 `scripts/build-release.sh` takes the version from `Cargo.toml` and names the
 folder after it.

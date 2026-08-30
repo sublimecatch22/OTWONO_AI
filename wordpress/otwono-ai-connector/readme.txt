@@ -4,7 +4,7 @@ Tags: ai, agents, profile, marketplace
 Requires at least: 6.4
 Tested up to: 6.7
 Requires PHP: 8.1
-Stable tag: 0.1.0
+Stable tag: 0.1.1
 License: Apache-2.0
 License URI: https://www.apache.org/licenses/LICENSE-2.0
 
@@ -63,6 +63,10 @@ to your machine. Local development mode exists for a site running on the same
 machine as OTWONO, and is not suitable for a public site.
 
 == Changelog ==
+
+= 0.1.1 =
+* No change to the plugin. Released alongside the desktop
+  application so their versions stay in step.
 
 = 0.1.0 =
 * First development release: account link, profile with per-field visibility,
