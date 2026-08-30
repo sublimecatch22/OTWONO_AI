@@ -90,15 +90,30 @@ server-rendered — so the ZIP is exactly what runs.
 
 ## The GitHub Actions workflow
 
-`.github/workflows/release.yml` runs on a tag matching `v*`:
+`.github/workflows/release.yml` can be started two ways, and does the same
+thing either way.
+
+**From the Actions tab.** *Actions → Release → Run workflow*, and give it a
+version such as `0.1.0`. Nothing has to be tagged first: the release step
+creates the tag when it drafts the release, against the commit the run started
+from. This is the route to use when you cannot push to `refs/tags/*` — a
+ruleset restricting tag creation, or a token without the rights.
+
+**By pushing a tag** matching `v*`, if you would rather the tag came first.
 
 | Job | Runner | Produces |
 |---|---|---|
-| `verify` | Ubuntu | The whole check suite; everything else waits on it. |
+| `prepare` | Ubuntu | The version and tag, checked before anything is built. |
+| `verify` | Ubuntu | The whole check suite; every build waits on it. |
 | `linux` | Ubuntu | The `.deb` and the plugin ZIP. |
 | `windows` | Windows | The `.exe` and `.msi`. |
 | `macos` | macOS | The `.dmg`. |
 | `collect` | Ubuntu | One release folder, `SHA256SUMS`, and a draft GitHub release. |
+
+`prepare` refuses two mistakes before a runner-hour is spent on them: a version
+that is not a version, and a version that disagrees with `Cargo.toml`. The
+second is the one worth having — it stops a release being labelled `0.2.0`
+while every binary inside it reports `0.1.0`.
 
 The release is left as a **draft**. Publishing it is a person's decision.
 
@@ -124,7 +139,8 @@ first. Do not describe as finished anything that has not been run.
 ## The checklist
 
 - [ ] `./scripts/verify.sh` passes
-- [ ] Versions agree in all three files
+- [ ] Versions agree in all three files (`prepare` checks this too, but finding
+      out here is cheaper than finding out on a runner)
 - [ ] `RELEASE_NOTES.md` written
 - [ ] Linux `.deb` built and installed once on a clean machine
 - [ ] Windows `.exe` and `.msi` built and installed once

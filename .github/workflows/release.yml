@@ -1,16 +1,59 @@
 name: Release
 
 on:
+  # Two ways in. A tag is the tidier record, but pressing the button in the
+  # Actions tab needs no push rights over `refs/tags/*`, and the release step
+  # creates the tag itself when it drafts the release.
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release, for example 0.1.0 (a leading v is optional)'
+        required: true
+        type: string
 
 permissions:
   contents: write
 
 jobs:
+  prepare:
+    name: Work out what is being released
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+      version: ${{ steps.resolve.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: resolve
+        env:
+          # Through the environment rather than inlined, so a version string
+          # can never be read as part of the script itself.
+          RAW_VERSION: ${{ inputs.version || github.ref_name }}
+        run: |
+          version="${RAW_VERSION#v}"
+
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::\"$RAW_VERSION\" is not a version like 0.1.0 or v0.1.0."
+            exit 1
+          fi
+
+          # Refuse to label a release with a version the code does not claim.
+          declared="$(grep -m1 '^version' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')"
+          if [ "$version" != "$declared" ]; then
+            echo "::error::Asked to release $version, but Cargo.toml says $declared. \
+          Update the version in Cargo.toml, apps/desktop/src-tauri/tauri.conf.json and \
+          wordpress/otwono-ai-connector/otwono-ai-connector.php first."
+            exit 1
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "Releasing $version as tag v$version."
+
   verify:
     name: Verify before building anything
+    needs: prepare
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -123,7 +166,7 @@ jobs:
 
   collect:
     name: One folder, with checksums
-    needs: [linux, windows, macos]
+    needs: [prepare, linux, windows, macos]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -142,11 +185,17 @@ jobs:
           name: release
           path: release/
       # Left as a draft on purpose: publishing is a person's decision.
+      #
+      # When the tag does not exist yet — which is the case every time this is
+      # started from the Actions tab — creating the release creates it, against
+      # the commit this run was started from.
       - name: Draft the GitHub release
-        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           draft: true
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          name: OTWONO AI ${{ needs.prepare.outputs.version }}
+          target_commitish: ${{ github.sha }}
           files: release/*
           body: |
             See `RELEASE_NOTES.md` in the repository for what changed.
