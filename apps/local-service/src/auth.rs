@@ -19,11 +19,28 @@ use axum::response::{IntoResponse, Response};
 use crate::error::ApiError;
 use crate::state::AppState;
 
-/// Origins the web view may present. `tauri://localhost` is the packaged app;
-/// the `http://localhost:*` entries are the Vite development server.
+/// Origins the web view may present.
+///
+/// The packaged application presents a different origin on every platform, and
+/// all of them must be here or the interface talks to a service that refuses
+/// it:
+///
+/// * macOS and Linux serve the app from `tauri://localhost`.
+/// * **Windows serves it from `http://tauri.localhost`** — plain HTTP. WebView2
+///   cannot register a custom scheme, so Tauri uses a real one. It is `https`
+///   only when `app.windows.useHttpsScheme` is set, which this application does
+///   not set, so both forms are allowed rather than depending on that setting
+///   staying as it is.
+///
+/// The `http://localhost:*` entries are the Vite development server.
+///
+/// Every entry is an origin the application itself presents. A page anywhere
+/// else still gets a `403`, and a request from any of these still needs the
+/// token.
 pub fn default_allowed_origins() -> Vec<String> {
     vec![
         "tauri://localhost".to_string(),
+        "http://tauri.localhost".to_string(),
         "https://tauri.localhost".to_string(),
         "http://localhost:1420".to_string(),
         "http://127.0.0.1:1420".to_string(),
@@ -138,17 +155,27 @@ mod tests {
         AppState::for_tests()
     }
 
+    /// Every origin the packaged application can present, on every platform it
+    /// is built for. The Windows entry is the one this test existed without:
+    /// it asserted the macOS and Linux origin and the development server, so a
+    /// Windows build shipped in which the interface was refused by its own
+    /// service on every request — every screen empty, settings loading for
+    /// ever. Nothing here is theoretical; add the origin for a platform before
+    /// shipping to it.
     #[test]
     fn the_packaged_app_and_the_development_server_are_allowed() {
         let allowed = default_allowed_origins();
-        for origin in [
-            "tauri://localhost",
-            "http://localhost:1420",
-            "http://127.0.0.1:1420",
+        for (origin, platform) in [
+            ("tauri://localhost", "macOS and Linux"),
+            ("http://tauri.localhost", "Windows"),
+            ("https://tauri.localhost", "Windows with useHttpsScheme"),
+            ("http://localhost:1420", "the development server"),
+            ("http://127.0.0.1:1420", "the development server"),
         ] {
             assert!(
                 origin_allowed(&allowed, origin),
-                "{origin} should be allowed"
+                "{origin} is what {platform} presents; refusing it breaks the \
+                 whole interface"
             );
         }
     }
