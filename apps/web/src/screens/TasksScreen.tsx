@@ -6,11 +6,14 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import type { ProjectDetail, ProjectSummary, Task } from '../api/types';
 import { Button, Card, EmptyState, Notice, Spinner, TimeAgo } from '../components/primitives';
+import { AssignedAgent } from '../components/AssignedAgent';
 import { TaskStateBadge } from '../components/StateBadge';
 
 interface TaskRow {
   task: Task;
   projectTitle: string;
+  /** Who runs a task the plan left unassigned. */
+  orchestratorId: string | null;
 }
 
 export function TasksScreen() {
@@ -33,7 +36,11 @@ export function TasksScreen() {
       const rows: TaskRow[] = [];
       for (const project of loaded) {
         for (const task of project.tasks) {
-          rows.push({ task, projectTitle: project.title });
+          rows.push({
+            task,
+            projectTitle: project.title,
+            orchestratorId: project.orchestrator_agent_id,
+          });
         }
       }
       return rows;
@@ -42,8 +49,11 @@ export function TasksScreen() {
 
   const rows = details.data ?? [];
   const waiting = rows.filter((row) => row.task.state === 'awaiting_approval');
+  // A task waiting on one before it is 'queued'. It belongs here: this screen
+  // claims to show everything in flight, and a task nobody can see is a task
+  // nobody can check the assignment of.
   const active = rows.filter((row) =>
-    ['ready', 'running', 'verifying', 'blocked'].includes(row.task.state),
+    ['queued', 'ready', 'running', 'verifying', 'blocked'].includes(row.task.state),
   );
   const finished = rows.filter((row) =>
     ['completed', 'failed', 'cancelled'].includes(row.task.state),
@@ -77,7 +87,7 @@ export function TasksScreen() {
     items.length > 0 && (
       <Card title={`${title} (${items.length})`}>
         <ul className="stack">
-          {items.map(({ task, projectTitle }) => (
+          {items.map(({ task, projectTitle, orchestratorId }) => (
             <li key={task.id}>
               <button
                 type="button"
@@ -91,6 +101,10 @@ export function TasksScreen() {
                 <span className="muted">
                   {projectTitle} · updated <TimeAgo value={task.updated_at} />
                 </span>
+                <AssignedAgent
+                  assignedId={task.assigned_agent_id}
+                  orchestratorId={orchestratorId}
+                />
                 {task.failure_reason && <span className="muted">Needs: {task.failure_reason}</span>}
               </button>
             </li>

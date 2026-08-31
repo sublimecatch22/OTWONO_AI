@@ -16,6 +16,7 @@ async function addAgent(page: Page, name: string) {
 
 const ROLES: Record<string, string> = {
   'Executive Orchestrator': 'Coordination',
+  Researcher: 'Research',
   Writer: 'Writing',
   'Verification Agent': 'Verification',
 };
@@ -82,6 +83,14 @@ test.describe('office, project and report', () => {
     await expect(page.getByText('Gather the figures')).toBeVisible();
     await expect(page.getByText('Write the summary')).toBeVisible();
 
+    // This office has only the orchestrator, so the roles the plan asked for
+    // match nobody. Each row says who will actually pick the work up.
+    await expect(
+      page.getByText(
+        'Nobody is assigned, so the orchestrator (Executive Orchestrator) will do it',
+      ),
+    ).toHaveCount(2);
+
     // The plan runs only once the user approves it.
     await page.getByRole('button', { name: 'Approve and run' }).click();
     await expect(page.locator('.notice', { hasText: 'Last run' })).toBeVisible();
@@ -103,5 +112,37 @@ test.describe('office, project and report', () => {
     await report.getByRole('button', { name: 'Download' }).click();
     const file = await download;
     expect(file.suggestedFilename()).toBe('quarterly-report-for-q3-report.md');
+  });
+
+  test('each task row says which agent it was given to', async ({ page }) => {
+    await connectRuntime(page);
+    await createOffice(page, 'Q3 Operations');
+    await addAgent(page, 'Executive Orchestrator');
+    await addAgent(page, 'Researcher');
+    await addAgent(page, 'Writer');
+
+    await page.goto('/projects');
+    await page.getByLabel('What are you trying to achieve?').fill('Quarterly report for Q3');
+    await page.getByLabel('Say more about it').fill('Summarise the Q3 numbers for the board.');
+    await page.getByLabel('How will you know it is done?').fill('Includes revenue');
+    await page.getByLabel('Where this belongs').selectOption({ label: 'Q3 Operations' });
+    await page.getByRole('button', { name: 'Create project' }).click();
+
+    await page.getByRole('button', { name: 'Plan the work' }).click();
+    await expect(page.getByRole('heading', { name: 'Tasks (2)' })).toBeVisible();
+
+    // The plan asked for Research and Writing, and this office has both. The
+    // work was shared out, and you can see that without opening the activity
+    // log.
+    const tasks = page.locator('.card', { hasText: 'Tasks (' });
+    const first = tasks.getByRole('listitem').filter({ hasText: 'Gather the figures' });
+    const second = tasks.getByRole('listitem').filter({ hasText: 'Write the summary' });
+    await expect(first.getByText('Assigned to Researcher')).toBeVisible();
+    await expect(second.getByText('Assigned to Writer')).toBeVisible();
+
+    // The same sentence follows the task to the Tasks tab.
+    await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: /Tasks/ }).click();
+    await expect(page.getByText('Assigned to Researcher')).toBeVisible();
+    await expect(page.getByText('Assigned to Writer')).toBeVisible();
   });
 });

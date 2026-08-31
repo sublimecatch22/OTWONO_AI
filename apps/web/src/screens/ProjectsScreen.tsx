@@ -24,6 +24,7 @@ import {
   Spinner,
   TimeAgo,
 } from '../components/primitives';
+import { AssignedAgent } from '../components/AssignedAgent';
 import { ProjectStateBadge, TaskStateBadge } from '../components/StateBadge';
 import { useUi } from '../state/ui';
 
@@ -455,6 +456,10 @@ export function ProjectDetailScreen() {
                   </strong>
                   <TaskStateBadge state={task.state} />
                 </div>
+                <AssignedAgent
+                  assignedId={task.assigned_agent_id}
+                  orchestratorId={data.orchestrator_agent_id}
+                />
                 {task.instructions && <p className="muted">{task.instructions}</p>}
                 {task.acceptance_criteria.length > 0 && (
                   <ul className="muted">
