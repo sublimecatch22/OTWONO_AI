@@ -3,7 +3,7 @@
  * Plugin Name:       OTWONO AI Connector
  * Plugin URI:        https://otwono.com/
  * Description:       Connects a WordPress site to OTWONO AI. Members sign in, edit a profile, browse the human task marketplace, and see the projects they chose to synchronise. Prompts, files and knowledge never leave the member's own machine.
- * Version:           0.1.4
+ * Version:           0.1.5
  * Requires at least: 6.4
  * Requires PHP:      8.1
  * Author:            OTWONO AI

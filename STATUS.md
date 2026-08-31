@@ -3,7 +3,7 @@
 What is built, what is not, and what is known to be limited. Updated at the end
 of each phase.
 
-**Version 0.1.4** · Last updated at the end of Phase 6.
+**Version 0.1.5** · Last updated at the end of Phase 6.
 
 ---
 
@@ -83,7 +83,7 @@ Built and *run* are different claims, so they are separated here.
 |---|---|---|
 | Linux `.deb` | Every release, by CI | **Yes** — installed from the published release on a clean machine, driven, and removed |
 | WordPress plugin ZIP | Every release, by CI | Tested against a relay that is really listening |
-| Windows `.exe` / `.msi` | Every release, by CI | **No. Nobody has launched it.** |
+| Windows `.exe` / `.msi` | Every release, by CI | **Once, on 0.1.4.** It installed and opened — and every screen was empty, because the service refused the web view's own origin. Fixed in 0.1.5, which has not itself been run on Windows. |
 | macOS `.dmg` | Every release, by CI | **No. Nobody has launched it.** |
 
 ## Known limitations
@@ -93,7 +93,8 @@ Recorded rather than omitted.
 | | |
 |---|---|
 | **Installers are unsigned.** | Windows SmartScreen warns about an unknown publisher; macOS needs right-click → Open. Signing needs certificates the project owner must buy. |
-| **Nobody has ever launched the Windows or macOS build.** | CI builds both on every release and publishes them, and those builds succeed — but a build succeeding is not the same as an application starting. Neither installer has been run by anyone, so the first person to try one is doing something no one has done. Expect the unexpected there, and report it. |
+| **Nobody has launched the macOS build.** | CI builds it on every release and the build succeeds, but a build succeeding is not an application starting. Windows was first run at 0.1.4 and the first launch found a bug that made the whole interface useless; macOS has had no such run. Expect the unexpected there, and report it. |
+| **Antivirus deletes the Windows installer.** | Norton quarantined it on download, and again on execution after being restored. Getting past it needs the file added to *both* Norton exclusion lists — scans, and Auto-Protect/SONAR. This is what an unsigned binary with no download history looks like to a reputation engine; a code-signing certificate is the only real fix. |
 | **The application has never spoken to a real model runtime.** | Every test drives a stub that speaks the Ollama protocol. That exercises the wire format, not Ollama or LM Studio themselves, and a real model is slower, chattier and worse at following orchestration prompts than a stub. The multi-agent screens are the likeliest place for this to show. |
 | **AppImage fails in a minimal container** for want of `xdg-open`. | The `.deb` is unaffected. Build AppImages on a desktop Linux machine. |
 | **The relay has not been deployed to a public address.** | It runs, is tested over real HTTP, and is tested against the WordPress plugin — but nothing claims it is deployed, and no default points at one. |
