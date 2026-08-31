@@ -1,74 +1,65 @@
-# OTWONO AI 0.2.0
+# OTWONO AI 0.2.1
 
-The first release that adds something rather than fixing what was broken.
-0.1.1 through 0.1.6 were checksums, documentation, and two bugs that made the
-Windows build unusable. This one changes how the agents work and how you set
-them up.
+A small release with one purpose: you can now see which agent is doing which
+task, without opening the activity log and reading JSON.
 
 ---
 
-## The agents were told how to behave, but not what to produce
+## The delegation was real, and invisible
 
-That was the real problem, and it did not show up in any test.
+The orchestration engine does share work out. Planning asks the orchestrator
+for a task list, each task can name the role that should do it, and that role
+is matched against the agents you actually have — a role it invents is dropped
+rather than conjured. Every task then runs under the agent it was assigned.
 
-Their instructions ran from 41 to 119 words apiece: a few rules about honesty
-and untrusted content, and nothing about output. Every test drives a stub that
-speaks the Ollama protocol, and a stub returns whatever it was going to return
-regardless of what it was told — so the instructions looked fine.
+None of that reached the screen. The task rows showed a title, a state badge
+and the output; the assignment existed only in the `agent` field of a
+`task.executed` entry in the activity log. That is not somewhere a person
+should have to look to answer "who is doing this".
 
-Against a real model it is the difference between a specialist and a chatbot
-with a job title. Told only how to behave, a model invents the shape of its
-answer, and the agent downstream receives something it cannot use.
+Every task row — on the project page and on the Tasks tab — now says who has
+it. Five cases, because all five happen:
 
-Every template now ends with an explicit contract for what it hands back. The
-Verification Agent already had one — *"Answer in this shape: 1. VERDICT"* — and
-was the only one; that pattern is now everywhere.
+| Situation | The row says |
+|---|---|
+| Assigned to an agent that exists | *Assigned to Researcher* |
+| Assigned to one since deleted | *Assigned to an agent that no longer exists* |
+| The agent list has not loaded | *Assigned to an agent* |
+| Nobody assigned | *Nobody is assigned, so the orchestrator (…) will do it* |
+| Nobody assigned, no orchestrator | *Nobody is assigned, and there is no orchestrator to fall back on* |
 
-| Agent | Before | Now |
-|---|---:|---:|
-| Executive Orchestrator | 119 | 270 |
-| Planner | 41 | 196 |
-| Researcher | 73 | 224 |
-| Software Engineer | 61 | 239 |
-| Writer | 54 | 219 |
-| Designer | 46 | 241 |
-| Budget Reviewer | 57 | 212 |
-| Security Reviewer | 65 | 272 |
-| Verification Agent | 85 | 243 |
-| Human Task Coordinator | 90 | 239 |
+The fourth line is the one that matters. When a task has no assigned agent the
+engine falls back to the project's orchestrator, so the work still gets done —
+saying only "unassigned" would have implied the opposite. The fifth is the one
+combination that cannot run at all; it is now visible before you press the
+button rather than as an error afterwards.
 
-Existing agents keep the instructions they have. These are the templates new
-agents are created from; edit yours, or make a fresh one from a template to see
-the new text.
+## The Tasks tab was hiding queued tasks
 
-## The Agents screen
+It filtered on ready, running, verifying and blocked. A task waiting on the one
+before it is `queued`, so it fell into no section and rendered nowhere — under
+a heading that says *Everything in flight, across every project*. On a
+two-task plan with a dependency, half the plan was missing.
 
-**Choose a template from a list**, and read what it is for before committing to
-it — rather than a row per template each with its own Copy button.
+Found by the new end-to-end test, which read the first task's agent and then
+could not find the second task at all.
 
-**Pick a model from what the connection actually offers.** It used to be a text
-box. A model name your runtime does not have failed at the first message, a
-long way from where the mistake was made.
+## If you are checking whether delegation works
 
-**"Temperature" is gone.** It is a sampling knob that describes nothing you are
-actually deciding, and the newest models reject the parameter outright. In its
-place, three choices that mean something:
-
-- *Stay close to the brief* — repeatable and literal, for review and figures.
-- *Balanced* — the default.
-- *Explore alternatives* — offers options, for design and drafting.
-
-The number is still stored, so nothing is lost.
+Staff the workspace before you plan. The planner can only assign work to agents
+that exist, matched by role or by name. An office holding nothing but an
+orchestrator will produce a plan where every row reads *"Nobody is assigned, so
+the orchestrator will do it"* — which looks exactly like a model refusing to
+delegate, for a reason that has nothing to do with the model.
 
 ## Please read
 
 - **The installers are unsigned**, and antivirus treats each release as a
   brand-new unknown file. Norton quarantines it on download and again on
-  execution; getting past it needs both exclusion lists.
-- **These instructions have never been judged against a real model.** They are
-  written for one, and the stub cannot tell you whether they work. If the
-  orchestration reads badly with a real model driving it, say so — the wording
-  is cheap to change now that the shape is right.
+  execution; getting past it needs both exclusion lists. A previous exclusion
+  does not cover this file.
+- **The agent instructions rewritten in 0.2.0 have still not been judged
+  against a real model.** Nothing here changes them.
 - **macOS has still never been launched by anyone.**
 - **Marketplace payments are simulated.** Nothing holds or moves money.
 - **No relay is deployed.**
@@ -80,7 +71,10 @@ Full detail in `STATUS.md`. What comes next is in `ROADMAP.md`.
 | | |
 |---|---|
 | Rust, 9 crates | 503 tests |
-| Frontend | 25 |
+| Frontend | 30 — seven of them over this wording |
 | WordPress plugin | 28 |
 | WordPress against a live relay | 6 |
-| End to end, against the real service | 20 — three of them driving this screen |
+| End to end, against the real service | 21 — one staffing an office and reading both agents' names off the rows |
+
+The end-to-end test was watched failing against the previous build before it
+was kept, so it is not passing by accident.
