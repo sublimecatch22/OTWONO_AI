@@ -100,33 +100,71 @@ pub async fn guard(
     if let Err(error) = check_origin(&state, &headers) {
         return error.into_response();
     }
+
+    // `check_origin` has already refused anything not on the list, so whatever
+    // is here is one we are willing to name. Hold on to it: every response
+    // below has to say which single origin it is for.
+    let origin = headers
+        .get(axum::http::header::ORIGIN)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned);
+
     if request.method() == axum::http::Method::OPTIONS {
-        return preflight_response(&state);
+        return preflight_response(origin.as_deref());
     }
+
+    // A refusal needs the headers too. Without them the browser blocks the
+    // response before the interface can read it, so a 401 arrives as an opaque
+    // network error and the screen shows nothing rather than saying what
+    // happened.
     if let Err(error) = check_token(&state, &headers) {
-        return error.into_response();
+        let mut response = error.into_response();
+        allow_origin(response.headers_mut(), origin.as_deref());
+        return response;
     }
-    next.run(request).await
+
+    let mut response = next.run(request).await;
+    allow_origin(response.headers_mut(), origin.as_deref());
+    response
 }
 
-fn preflight_response(state: &AppState) -> Response {
-    let allowed = state.allowed_origins.join(", ");
-    (
+/// Name the one origin this response is for.
+///
+/// `Access-Control-Allow-Origin` takes a single origin or `*`, never a list.
+/// A list is not a wider permission, it is a malformed header: the browser
+/// discards the response and the request fails as if the service were not
+/// there. `Vary: Origin` is required with it, so that a cached response for
+/// one origin is not served to another.
+fn allow_origin(headers: &mut HeaderMap, origin: Option<&str>) {
+    let Some(origin) = origin else { return };
+    let Ok(value) = axum::http::HeaderValue::from_str(origin) else {
+        return;
+    };
+    headers.insert("access-control-allow-origin", value);
+    headers.insert(
+        axum::http::header::VARY,
+        axum::http::HeaderValue::from_static("origin"),
+    );
+}
+
+fn preflight_response(origin: Option<&str>) -> Response {
+    let mut response = (
         StatusCode::NO_CONTENT,
         [
             (
                 "access-control-allow-methods",
-                "GET, POST, PUT, DELETE, OPTIONS".to_string(),
+                "GET, POST, PUT, DELETE, OPTIONS",
             ),
             (
                 "access-control-allow-headers",
-                "authorization, content-type".to_string(),
+                "authorization, content-type",
             ),
-            ("access-control-allow-origin", allowed),
-            ("access-control-max-age", "600".to_string()),
+            ("access-control-max-age", "600"),
         ],
     )
-        .into_response()
+        .into_response();
+    allow_origin(response.headers_mut(), origin);
+    response
 }
 
 #[cfg(test)]
@@ -178,6 +216,47 @@ mod tests {
                  whole interface"
             );
         }
+    }
+
+    /// `Access-Control-Allow-Origin` carries one origin or `*`, never a list.
+    /// This once joined the whole allow-list with commas, which is not a wider
+    /// permission but a malformed header: browsers discard the response, so
+    /// every screen in the application was empty while the service itself
+    /// answered correctly to anything that was not a browser. A browser cannot
+    /// read this header back, so the assertion has to live here.
+    #[test]
+    fn the_allow_origin_header_names_exactly_one_origin() {
+        for origin in default_allowed_origins() {
+            let mut headers = HeaderMap::new();
+            allow_origin(&mut headers, Some(&origin));
+            let value = headers
+                .get("access-control-allow-origin")
+                .expect("an allowed origin must be named")
+                .to_str()
+                .unwrap();
+            assert_eq!(
+                value, origin,
+                "the header must echo the one origin asked for"
+            );
+            assert!(
+                !value.contains(','),
+                "a list is a malformed header: {value}"
+            );
+            assert_eq!(
+                headers.get(axum::http::header::VARY).unwrap(),
+                "origin",
+                "a response that varies by origin must say so, or a cache will \
+                 serve one origin's response to another"
+            );
+        }
+    }
+
+    /// No `Origin` means no browser, so there is nothing to allow.
+    #[test]
+    fn a_request_without_an_origin_gets_no_allow_header() {
+        let mut headers = HeaderMap::new();
+        allow_origin(&mut headers, None);
+        assert!(headers.get("access-control-allow-origin").is_none());
     }
 
     #[test]

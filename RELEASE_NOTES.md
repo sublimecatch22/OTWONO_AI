@@ -1,56 +1,49 @@
-# OTWONO AI 0.1.5
+# OTWONO AI 0.1.6
 
-**Windows users: upgrade.** In 0.1.4 and every release before it, the Windows
-build started and then showed nothing — no agents, no templates, no connections,
-empty dropdowns, and a Settings screen that loaded for ever. This release fixes
-that. Linux and macOS were never affected.
+**Windows users: this is the one that actually works.** 0.1.5 claimed to fix the
+empty screens and did not. There were two faults in the same handshake, and
+0.1.5 fixed only the first — so nothing visibly changed.
 
 ---
 
-## What was wrong
+## What was wrong, both times
 
-The local service checks the `Origin` of every request, so that a page in a
-browser cannot reach into your data. The allow-list held the origin the
-packaged application presents on macOS and Linux, `tauri://localhost`, and the
-`https://` form of the Windows one.
+The packaged application is a page at one origin talking to a service at
+another, so the browser applies CORS to every request. Two things were broken:
 
-Windows presents `http://tauri.localhost` — plain HTTP, because WebView2 cannot
-register a custom scheme and Tauri uses a real one instead.
+**One — the origin was not on the allow-list.** Windows serves the app from
+`http://tauri.localhost`, and only the `https://` form was listed. Fixed in
+0.1.5.
 
-That origin was not on the list. So on Windows the interface was refused by its
-own service, with a `403`, on every single request. Each screen fell back to
-its empty state, which is why nothing looked broken — it looked like an
-application with no data in it. Settings has no empty state, so it spun.
+**Two — the CORS headers were malformed, and mostly absent.** The pre-flight
+response named *every* allowed origin in one comma-joined
+`Access-Control-Allow-Origin`. That header takes a single origin or `*`; a list
+is not a broader permission but an invalid header, and browsers discard the
+response. Ordinary responses carried no such header at all.
 
-`http://tauri.localhost` is now on the list, alongside the `https://` form, so
-the fix holds whether or not `useHttpsScheme` is ever set.
+So with 0.1.5 the first gate opened and the second stayed shut. The service
+answered correctly to anything that was not a browser, and the browser threw
+every answer away before the interface could read it. Every screen fell back to
+its empty state; Settings, which has none, spun.
 
-**This changes nothing about what is refused.** A page at any other origin still
-gets a `403`, a lookalike like `http://tauri.localhost.evil.example` still gets
-a `403` because matching is exact, and a request from an allowed origin without
-a valid token still gets a `401`. All of that is asserted by tests and was
-checked by hand against a running service.
+Both are fixed now. The response names the one origin that asked, and carries
+`Vary: Origin` so a cache cannot serve one origin's response to another.
 
-## How it shipped
+**Refusals carry the headers too.** Previously a `401` was discarded by the
+browser like everything else, so a genuine error arrived as an opaque network
+failure and the screen simply showed nothing. Now the interface can read the
+refusal and tell you what happened.
 
-Honestly: the test for this asserted the macOS and Linux origin and the
-development server, and never the Windows one. 500 tests passed on a build
-whose interface could not talk to its own service. Nothing catches that except
-starting the application on the platform it is built for, which nobody had done
-until someone installed 0.1.4 and told us what they saw.
+## Why the tests did not catch it
 
-The test now names every origin the application can present, on every platform
-it is built for, with the platform against each.
+Every test talked to the service in a way that does not enforce CORS: the Rust
+tests call the handlers directly, `curl` ignores it, and the end-to-end harness
+proxies `/api` so those requests are same-origin. 500 tests passed on a build
+whose every screen was empty in a real browser.
 
-## If you are on Windows
-
-Your antivirus may quarantine the installer, and quarantine it again when you
-run it after restoring. That is what an unsigned binary with no download
-history looks like to a reputation engine. Getting past Norton needs the file
-added to *both* exclusion lists — scans, and Auto-Protect/SONAR — and possibly
-the installed folder too. Verify the checksum first, then decide.
-
-A code-signing certificate is the only real fix, and needs buying.
+There are now tests that cross an origin in a real browser, against the real
+service — the arrangement the desktop shell actually uses. They were confirmed
+to fail on the old code before being kept.
 
 ## Verifying this download
 
@@ -58,22 +51,16 @@ A code-signing certificate is the only real fix, and needs buying.
 sha256sum --ignore-missing -c SHA256SUMS
 ```
 
-## Installing
-
-See `docs/INSTALL.md`. In short: install Ollama or LM Studio, pull a model,
-install OTWONO, and connect it on the Connections screen.
-
 ## Please read
 
-- **The installers are unsigned.** See above.
-- **macOS has still never been launched by anyone.** Windows has now been run
-  once, at 0.1.4, and that first run found the bug this release fixes. macOS has
-  had no such run.
-- **The application has never spoken to a real model runtime.** Every test
-  drives a stub speaking the Ollama protocol.
+- **The installers are unsigned**, and antivirus treats each release as a
+  brand-new unknown file. Norton quarantines it on download and again on
+  execution; getting past it needs both exclusion lists. A code-signing
+  certificate is the only real fix.
+- **macOS has still never been launched by anyone.**
+- **The application has never spoken to a real model runtime.**
 - **Marketplace payments are simulated.** Nothing holds or moves money.
 - **No relay is deployed.**
-- **Without an embedding model**, search matches words rather than meaning.
 
 Full detail in `STATUS.md`.
 
@@ -81,12 +68,8 @@ Full detail in `STATUS.md`.
 
 | | |
 |---|---|
-| Rust, 9 crates | 500 tests |
+| Rust, 9 crates | 502 tests |
 | Frontend | 25 |
 | WordPress plugin | 28 |
 | WordPress against a live relay | 6 |
-| End to end, against the real service | 15 |
-
-Against a running service, each origin the application presents was checked by
-hand: all four answer `200` and return the ten seeded agents; three hostile
-origins and a missing token are refused.
+| End to end, against the real service | 17 — two of them in a browser, cross-origin |

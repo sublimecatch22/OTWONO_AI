@@ -165,7 +165,18 @@ export async function startHarness() {
         return response.end(JSON.stringify({ error: 'unknown harness route' }));
       }
       response.writeHead(200, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({ dataDir, port: handshake.port }));
+      // The service's own address and token, not the proxy's. A test that
+      // wants to cross an origin — as the packaged desktop shell does on every
+      // request — has to talk to the service directly, because everything
+      // through this proxy is same-origin and never exercises CORS at all.
+      response.end(
+        JSON.stringify({
+          dataDir,
+          port: handshake.port,
+          serviceUrl: `http://127.0.0.1:${handshake.port}`,
+          token: handshake.token,
+        }),
+      );
     } catch (error) {
       response.writeHead(500, { 'content-type': 'application/json' });
       response.end(JSON.stringify({ error: String(error) }));
