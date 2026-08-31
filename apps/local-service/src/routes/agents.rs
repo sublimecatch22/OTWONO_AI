@@ -520,7 +520,13 @@ mod tests {
         assert_eq!(agent.name, "My Researcher");
         assert_eq!(agent.role, "Research");
         assert_eq!(agent.capabilities, vec![Capability::KnowledgeSearch]);
-        assert!(agent.system_instructions.contains("gather evidence"));
+
+        // Against the template itself, not a phrase from it. A quoted sentence
+        // makes this fail every time the instructions are improved, which says
+        // nothing about whether inheritance works — and the instructions are
+        // meant to be rewritten as they get better.
+        let template = otwono_agent_core::templates::find("researcher").unwrap();
+        assert_eq!(agent.system_instructions, template.system_instructions);
     }
 
     #[tokio::test]

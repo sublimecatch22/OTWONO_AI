@@ -9,6 +9,7 @@ import type {
   AgentTemplateSummary,
   Capability,
   ConnectionsResponse,
+  ConnectionTest,
   SourcesResponse,
 } from '../api/types';
 import { Badge, Button, Card, EmptyState, Field, Notice, Spinner } from '../components/primitives';
@@ -26,6 +27,146 @@ const CAPABILITY_LABELS: Record<Capability, string> = {
 };
 
 const OFF_DEVICE: Capability[] = ['http_fetch', 'relay_sync', 'marketplace_publish'];
+
+/**
+ * "Temperature" is a sampling knob, and it does not describe anything a person
+ * setting up an agent is deciding. Worse, the newest models reject the
+ * parameter outright, so a number in this box is not even reliably doing what
+ * it says.
+ *
+ * These are the three choices that actually differ, named for what they mean
+ * for the work. The number is still stored, and still editable under Advanced
+ * for anyone who wants it.
+ */
+const APPROACHES = {
+  close: {
+    label: 'Stay close to the brief',
+    temperature: 0.1,
+    description: 'Repeatable and literal. For review, verification and figures.',
+  },
+  balanced: {
+    label: 'Balanced',
+    temperature: 0.5,
+    description: 'The default. Follows the brief, with room to phrase things well.',
+  },
+  explore: {
+    label: 'Explore alternatives',
+    temperature: 0.9,
+    description: 'Offers options and unasked-for angles. For design and drafting.',
+  },
+} as const;
+
+type ApproachKey = keyof typeof APPROACHES;
+
+/**
+ * Which approach a stored number falls under, so a hand-set value still shows
+ * something true rather than resetting to a default.
+ *
+ * Bands, not nearest-neighbour: the templates ship values that land exactly
+ * between two anchors — the Designer's 0.7 is equidistant from 0.5 and 0.9 —
+ * and nearest-neighbour resolved those ties by whichever key happened to come
+ * first. A boundary that has to be decided is better decided here, in the
+ * open, than by object key order. Both boundaries belong to the more
+ * exploratory band, so 0.7 reads as exploring rather than balanced.
+ */
+function approachFor(temperature: number): ApproachKey {
+  if (temperature < 0.3) return 'close';
+  if (temperature < 0.7) return 'balanced';
+  return 'explore';
+}
+
+function TemplatePicker({
+  templates,
+  busy,
+  onCreate,
+}: {
+  templates: AgentTemplateSummary[];
+  busy: boolean;
+  onCreate: (template: AgentTemplateSummary) => void;
+}) {
+  const [key, setKey] = useState('');
+  const chosen = templates.find((template) => template.key === key) ?? null;
+
+  if (templates.length === 0) return <p className="muted">No templates are available.</p>;
+
+  return (
+    <div className="stack">
+      <Field label="Template">
+        {({ id }) => (
+          <select
+            id={id}
+            className="select"
+            value={key}
+            onChange={(event) => setKey(event.target.value)}
+          >
+            <option value="">Choose a template…</option>
+            {templates.map((template) => (
+              <option key={template.key} value={template.key}>
+                {template.name}
+              </option>
+            ))}
+          </select>
+        )}
+      </Field>
+      {chosen && <p className="muted">{chosen.description}</p>}
+      <Button disabled={!chosen || busy} onClick={() => chosen && onCreate(chosen)}>
+        {busy ? 'Creating…' : 'Create agent'}
+      </Button>
+    </div>
+  );
+}
+
+/**
+ * The models a connection actually reports, rather than a box to type one into.
+ * A typed model name that the runtime does not have fails at the first message,
+ * which is a long way from where the mistake was made.
+ */
+function ModelField({
+  connectionId,
+  value,
+  onChange,
+}: {
+  connectionId: string | null;
+  value: string | null;
+  onChange: (model: string | null) => void;
+}) {
+  const test = useQuery({
+    queryKey: ['connections', connectionId, 'models'],
+    enabled: Boolean(connectionId),
+    queryFn: () => api.post<ConnectionTest>(`/api/connections/${connectionId}/test`, {}),
+  });
+
+  const models = test.data?.models ?? [];
+  // A model set on another connection, or before this one was reachable, must
+  // still be visible — silently dropping it would look like the agent lost its
+  // model.
+  const unlisted = value && !models.some((model) => model.id === value) ? value : null;
+
+  return (
+    <Field label="Model" hint={connectionId ? undefined : 'Choose a connection first.'}>
+      {({ id, describedBy }) => (
+        <select
+          id={id}
+          aria-describedby={describedBy}
+          className="select"
+          disabled={!connectionId}
+          value={value ?? ''}
+          onChange={(event) => onChange(event.target.value || null)}
+        >
+          <option value="">Connection default</option>
+          {unlisted && (
+            <option value={unlisted}>{unlisted} (not offered by this connection)</option>
+          )}
+          {models.map((model) => (
+            <option key={model.id} value={model.id}>
+              {model.id}
+            </option>
+          ))}
+        </select>
+      )}
+    </Field>
+  );
+}
 
 export function AgentsScreen() {
   const client = useQueryClient();
@@ -160,19 +301,11 @@ export function AgentsScreen() {
           </ul>
 
           <Card title="Start from a template">
-            <ul className="stack">
-              {(templates.data ?? []).map((template) => (
-                <li key={template.key} className="row">
-                  <div>
-                    <strong>{template.name}</strong>
-                    <p className="muted">{template.description}</p>
-                  </div>
-                  <Button size="sm" onClick={() => createFromTemplate.mutate(template)}>
-                    Copy
-                  </Button>
-                </li>
-              ))}
-            </ul>
+            <TemplatePicker
+              templates={templates.data ?? []}
+              busy={createFromTemplate.isPending}
+              onCreate={(template) => createFromTemplate.mutate(template)}
+            />
           </Card>
         </div>
 
@@ -364,30 +497,24 @@ function AgentEditor({ agentId, onDeleted }: { agentId: string; onDeleted: () =>
               </select>
             )}
           </Field>
-          <Field label="Model">
-            {({ id }) => (
-              <input
-                id={id}
-                className="input"
-                placeholder="Connection default"
-                value={current.model ?? ''}
-                onChange={(event) => change({ model: event.target.value || null })}
-              />
-            )}
-          </Field>
+          <ModelField
+            connectionId={current.provider_connection_id ?? null}
+            value={current.model ?? null}
+            onChange={(model) => change({ model })}
+          />
         </div>
 
         <div className="grid grid--three">
-          <Field label="Temperature">
-            {({ id }) => (
-              <input
+          <Field
+            label="Approach"
+            hint="How much latitude this agent takes. A reviewer should stay close to the brief; a designer usually should not."
+          >
+            {({ id, describedBy }) => (
+              <select
                 id={id}
-                className="input"
-                type="number"
-                min={0}
-                max={2}
-                step={0.1}
-                value={current.parameters?.temperature ?? 0.7}
+                aria-describedby={describedBy}
+                className="select"
+                value={approachFor(current.parameters?.temperature ?? 0.7)}
                 onChange={(event) =>
                   change({
                     parameters: {
@@ -397,11 +524,17 @@ function AgentEditor({ agentId, onDeleted }: { agentId: string; onDeleted: () =>
                         stop: [],
                         extra: {},
                       }),
-                      temperature: Number(event.target.value),
+                      temperature: APPROACHES[event.target.value as ApproachKey].temperature,
                     },
                   })
                 }
-              />
+              >
+                {(Object.keys(APPROACHES) as ApproachKey[]).map((key) => (
+                  <option key={key} value={key}>
+                    {APPROACHES[key].label}
+                  </option>
+                ))}
+              </select>
             )}
           </Field>
           <Field label="Maximum steps">
