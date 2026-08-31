@@ -3,7 +3,7 @@
 What is built, what is not, and what is known to be limited. Updated at the end
 of each phase.
 
-**Version 0.1.5** · Last updated at the end of Phase 6.
+**Version 0.1.6** · Last updated at the end of Phase 6.
 
 ---
 
@@ -13,11 +13,11 @@ Every number here comes from a run, not an estimate.
 
 | Suite | Command | Result |
 |---|---|---|
-| Rust — 9 crates | `cargo test --workspace` | **500 passing** |
+| Rust — 9 crates | `cargo test --workspace` | **502 passing** |
 | Frontend | `npm run test` | **25 passing** |
 | WordPress plugin | `php wordpress/tests/run-tests.php` | **28 passing** |
 | WordPress against a live relay | `./scripts/run-wordpress-live-tests.sh` | **6 passing** |
-| End to end | `npx playwright test` | **15 passing** |
+| End to end | `npx playwright test` | **17 passing** |
 | Lints | `cargo clippy --workspace --all-targets -- -D warnings` | Clean |
 | Formatting | `cargo fmt --check`, `npm run format:check` | Clean |
 | Types | `npm run typecheck` | Clean |
@@ -83,7 +83,7 @@ Built and *run* are different claims, so they are separated here.
 |---|---|---|
 | Linux `.deb` | Every release, by CI | **Yes** — installed from the published release on a clean machine, driven, and removed |
 | WordPress plugin ZIP | Every release, by CI | Tested against a relay that is really listening |
-| Windows `.exe` / `.msi` | Every release, by CI | **Once, on 0.1.4.** It installed and opened — and every screen was empty, because the service refused the web view's own origin. Fixed in 0.1.5, which has not itself been run on Windows. |
+| Windows `.exe` / `.msi` | Every release, by CI | **0.1.4 and 0.1.5.** Both installed and opened, and both showed empty screens: the service refused the web view's origin, and then answered it with a malformed CORS header. 0.1.6 fixes the second; it has not itself been run on Windows. |
 | macOS `.dmg` | Every release, by CI | **No. Nobody has launched it.** |
 
 ## Known limitations
