@@ -1,75 +1,86 @@
-# OTWONO AI 0.1.6
+# OTWONO AI 0.2.0
 
-**Windows users: this is the one that actually works.** 0.1.5 claimed to fix the
-empty screens and did not. There were two faults in the same handshake, and
-0.1.5 fixed only the first — so nothing visibly changed.
+The first release that adds something rather than fixing what was broken.
+0.1.1 through 0.1.6 were checksums, documentation, and two bugs that made the
+Windows build unusable. This one changes how the agents work and how you set
+them up.
 
 ---
 
-## What was wrong, both times
+## The agents were told how to behave, but not what to produce
 
-The packaged application is a page at one origin talking to a service at
-another, so the browser applies CORS to every request. Two things were broken:
+That was the real problem, and it did not show up in any test.
 
-**One — the origin was not on the allow-list.** Windows serves the app from
-`http://tauri.localhost`, and only the `https://` form was listed. Fixed in
-0.1.5.
+Their instructions ran from 41 to 119 words apiece: a few rules about honesty
+and untrusted content, and nothing about output. Every test drives a stub that
+speaks the Ollama protocol, and a stub returns whatever it was going to return
+regardless of what it was told — so the instructions looked fine.
 
-**Two — the CORS headers were malformed, and mostly absent.** The pre-flight
-response named *every* allowed origin in one comma-joined
-`Access-Control-Allow-Origin`. That header takes a single origin or `*`; a list
-is not a broader permission but an invalid header, and browsers discard the
-response. Ordinary responses carried no such header at all.
+Against a real model it is the difference between a specialist and a chatbot
+with a job title. Told only how to behave, a model invents the shape of its
+answer, and the agent downstream receives something it cannot use.
 
-So with 0.1.5 the first gate opened and the second stayed shut. The service
-answered correctly to anything that was not a browser, and the browser threw
-every answer away before the interface could read it. Every screen fell back to
-its empty state; Settings, which has none, spun.
+Every template now ends with an explicit contract for what it hands back. The
+Verification Agent already had one — *"Answer in this shape: 1. VERDICT"* — and
+was the only one; that pattern is now everywhere.
 
-Both are fixed now. The response names the one origin that asked, and carries
-`Vary: Origin` so a cache cannot serve one origin's response to another.
+| Agent | Before | Now |
+|---|---:|---:|
+| Executive Orchestrator | 119 | 270 |
+| Planner | 41 | 196 |
+| Researcher | 73 | 224 |
+| Software Engineer | 61 | 239 |
+| Writer | 54 | 219 |
+| Designer | 46 | 241 |
+| Budget Reviewer | 57 | 212 |
+| Security Reviewer | 65 | 272 |
+| Verification Agent | 85 | 243 |
+| Human Task Coordinator | 90 | 239 |
 
-**Refusals carry the headers too.** Previously a `401` was discarded by the
-browser like everything else, so a genuine error arrived as an opaque network
-failure and the screen simply showed nothing. Now the interface can read the
-refusal and tell you what happened.
+Existing agents keep the instructions they have. These are the templates new
+agents are created from; edit yours, or make a fresh one from a template to see
+the new text.
 
-## Why the tests did not catch it
+## The Agents screen
 
-Every test talked to the service in a way that does not enforce CORS: the Rust
-tests call the handlers directly, `curl` ignores it, and the end-to-end harness
-proxies `/api` so those requests are same-origin. 500 tests passed on a build
-whose every screen was empty in a real browser.
+**Choose a template from a list**, and read what it is for before committing to
+it — rather than a row per template each with its own Copy button.
 
-There are now tests that cross an origin in a real browser, against the real
-service — the arrangement the desktop shell actually uses. They were confirmed
-to fail on the old code before being kept.
+**Pick a model from what the connection actually offers.** It used to be a text
+box. A model name your runtime does not have failed at the first message, a
+long way from where the mistake was made.
 
-## Verifying this download
+**"Temperature" is gone.** It is a sampling knob that describes nothing you are
+actually deciding, and the newest models reject the parameter outright. In its
+place, three choices that mean something:
 
-```bash
-sha256sum --ignore-missing -c SHA256SUMS
-```
+- *Stay close to the brief* — repeatable and literal, for review and figures.
+- *Balanced* — the default.
+- *Explore alternatives* — offers options, for design and drafting.
+
+The number is still stored, so nothing is lost.
 
 ## Please read
 
 - **The installers are unsigned**, and antivirus treats each release as a
   brand-new unknown file. Norton quarantines it on download and again on
-  execution; getting past it needs both exclusion lists. A code-signing
-  certificate is the only real fix.
+  execution; getting past it needs both exclusion lists.
+- **These instructions have never been judged against a real model.** They are
+  written for one, and the stub cannot tell you whether they work. If the
+  orchestration reads badly with a real model driving it, say so — the wording
+  is cheap to change now that the shape is right.
 - **macOS has still never been launched by anyone.**
-- **The application has never spoken to a real model runtime.**
 - **Marketplace payments are simulated.** Nothing holds or moves money.
 - **No relay is deployed.**
 
-Full detail in `STATUS.md`.
+Full detail in `STATUS.md`. What comes next is in `ROADMAP.md`.
 
 ## Verified before release
 
 | | |
 |---|---|
-| Rust, 9 crates | 502 tests |
+| Rust, 9 crates | 503 tests |
 | Frontend | 25 |
 | WordPress plugin | 28 |
 | WordPress against a live relay | 6 |
-| End to end, against the real service | 17 — two of them in a browser, cross-origin |
+| End to end, against the real service | 20 — three of them driving this screen |
