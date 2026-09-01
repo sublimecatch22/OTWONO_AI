@@ -604,6 +604,18 @@
   padding: 0;
 }
 
+/*
+ * The agent tree. A nested list is indented and given a rule down the left so
+ * the relationship is visible as well as announced; the outermost level keeps
+ * the flat list's alignment, so a roster with nobody reporting to anybody
+ * looks exactly as it did.
+ */
+.tree .tree {
+  margin-top: var(--space-3);
+  padding-left: var(--space-4);
+  border-left: 1px solid var(--border-subtle);
+}
+
 .row {
   display: flex;
   align-items: center;

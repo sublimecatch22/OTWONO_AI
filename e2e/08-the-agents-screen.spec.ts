@@ -63,4 +63,43 @@ test.describe('the agents screen', () => {
     await expect(model).toBeDisabled();
     await expect(page.getByText('Choose a connection first.')).toBeVisible();
   });
+
+  test('an agent can be put under an orchestrator, and the list becomes a tree', async ({
+    page,
+  }) => {
+    await page.getByLabel('Template').selectOption({ label: 'Executive Orchestrator' });
+    await page.getByRole('button', { name: 'Create agent' }).click();
+    await expect(page.getByRole('heading', { name: 'Executive Orchestrator (copy)' })).toBeVisible();
+
+    await page.getByLabel('Template').selectOption({ label: 'Researcher' });
+    await page.getByRole('button', { name: 'Create agent' }).click();
+    await expect(page.getByRole('heading', { name: 'Researcher (copy)' })).toBeVisible();
+
+    // The machine ships with agents already, so count relative to what is here
+    // rather than expecting a particular roster.
+    const list = page.locator('ul.tree').first();
+    const roots = list.locator('> li');
+    const before = await roots.count();
+    const orchestrator = roots.filter({ hasText: 'Executive Orchestrator (copy)' });
+
+    // Both are at the top: neither is nested inside anything.
+    await expect(roots.filter({ hasText: 'Researcher (copy)' })).toHaveCount(1);
+    await expect(orchestrator.locator('ul.tree')).toHaveCount(0);
+
+    const reportsTo = page.getByLabel('Reports to');
+    await expect(reportsTo).toHaveValue('');
+    // An agent is never offered as its own manager.
+    await expect(reportsTo.locator('option', { hasText: 'Researcher (copy)' })).toHaveCount(0);
+
+    await reportsTo.selectOption({ label: 'Executive Orchestrator (copy) — Coordination' });
+    await page.getByRole('button', { name: 'Save changes' }).click();
+    await expect(page.getByText('Saved.', { exact: false })).toBeVisible();
+
+    // One fewer root, and the researcher is now inside the orchestrator.
+    await expect(roots).toHaveCount(before - 1);
+    await expect(
+      orchestrator.locator('ul.tree').getByRole('button', { name: /Researcher \(copy\)/ }),
+    ).toBeVisible();
+    await expect(orchestrator.getByText('1 report', { exact: false })).toBeVisible();
+  });
 });

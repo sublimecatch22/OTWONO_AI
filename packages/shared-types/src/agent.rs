@@ -90,6 +90,10 @@ pub struct Agent {
     pub max_steps: u32,
     pub timeout_seconds: u32,
     pub workspace_id: Option<String>,
+    /// The agent this one reports to. `None` makes it a root of the tree.
+    /// Never its own id, and never an id that reaches back to it.
+    #[serde(default)]
+    pub parent_agent_id: Option<String>,
     pub version: u32,
     pub is_template: bool,
     pub template_key: Option<String>,

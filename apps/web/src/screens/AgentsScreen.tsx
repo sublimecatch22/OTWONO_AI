@@ -13,6 +13,7 @@ import type {
   SourcesResponse,
 } from '../api/types';
 import { Badge, Button, Card, EmptyState, Field, Notice, Spinner } from '../components/primitives';
+import { buildAgentTree, descendantsOf, type TreeNode } from '../lib/agentTree';
 import { useUi } from '../state/ui';
 
 const CAPABILITY_LABELS: Record<Capability, string> = {
@@ -168,6 +169,61 @@ function ModelField({
   );
 }
 
+/**
+ * One level of the agent tree, and every level beneath it.
+ *
+ * Nested lists rather than indentation alone: the nesting is what tells a
+ * screen reader that these agents report to that one, and indentation is only
+ * how it looks.
+ */
+function AgentBranches({
+  nodes,
+  selected,
+  onSelect,
+}: {
+  nodes: TreeNode<Agent>[];
+  selected: string | null;
+  onSelect: (id: string) => void;
+}) {
+  if (nodes.length === 0) return null;
+  return (
+    <ul className="stack tree">
+      {nodes.map(({ agent, children }) => (
+        <li key={agent.id}>
+          <button
+            type="button"
+            className={`listbutton${selected === agent.id ? ' listbutton--active' : ''}`}
+            onClick={() => onSelect(agent.id)}
+            aria-current={selected === agent.id ? 'true' : undefined}
+          >
+            <strong>{agent.name}</strong>
+            <span className="muted">
+              {agent.role}
+              {children.length > 0 &&
+                ` · ${children.length} report${children.length === 1 ? '' : 's'}`}
+            </span>
+            <span className="row row--wrap">
+              {agent.capabilities.length === 0 ? (
+                <Badge tone="neutral">no tools</Badge>
+              ) : (
+                agent.capabilities.map((capability) => (
+                  <Badge
+                    key={capability}
+                    tone={OFF_DEVICE.includes(capability) ? 'caution' : 'neutral'}
+                  >
+                    {capability}
+                  </Badge>
+                ))
+              )}
+            </span>
+          </button>
+          <AgentBranches nodes={children} selected={selected} onSelect={onSelect} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function AgentsScreen() {
   const client = useQueryClient();
   const toast = useUi((state) => state.toast);
@@ -270,35 +326,11 @@ export function AgentsScreen() {
               }
             />
           )}
-          <ul className="stack">
-            {(agents.data ?? []).map((agent) => (
-              <li key={agent.id}>
-                <button
-                  type="button"
-                  className={`listbutton${selected === agent.id ? ' listbutton--active' : ''}`}
-                  onClick={() => setSelected(agent.id)}
-                  aria-current={selected === agent.id ? 'true' : undefined}
-                >
-                  <strong>{agent.name}</strong>
-                  <span className="muted">{agent.role}</span>
-                  <span className="row row--wrap">
-                    {agent.capabilities.length === 0 ? (
-                      <Badge tone="neutral">no tools</Badge>
-                    ) : (
-                      agent.capabilities.map((capability) => (
-                        <Badge
-                          key={capability}
-                          tone={OFF_DEVICE.includes(capability) ? 'caution' : 'neutral'}
-                        >
-                          {capability}
-                        </Badge>
-                      ))
-                    )}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
+          <AgentBranches
+            nodes={buildAgentTree(agents.data ?? [])}
+            selected={selected}
+            onSelect={setSelected}
+          />
 
           <Card title="Start from a template">
             <TemplatePicker
@@ -377,6 +409,12 @@ function AgentEditor({ agentId, onDeleted }: { agentId: string; onDeleted: () =>
       client.invalidateQueries({ queryKey: ['agent', agentId, 'versions'] });
       toast({ tone: 'positive', body: 'Restored as a new version. Nothing was lost.' });
     },
+  });
+
+  // The same cached list the tree is drawn from.
+  const roster = useQuery({
+    queryKey: ['agents'],
+    queryFn: () => api.get<Agent[]>('/api/agents'),
   });
 
   const remove = useMutation({
@@ -503,6 +541,36 @@ function AgentEditor({ agentId, onDeleted }: { agentId: string; onDeleted: () =>
             onChange={(model) => change({ model })}
           />
         </div>
+
+        <Field
+          label="Reports to"
+          hint="Put this agent under an orchestrator and it becomes one of the specialists that orchestrator can dispatch. Leave it at the top if it answers for itself."
+        >
+          {({ id, describedBy }) => {
+            // Its own reports are not offered: the service refuses a cycle, and
+            // offering a choice only to refuse it is worse than not offering it.
+            const ineligible = descendantsOf(roster.data ?? [], agentId);
+            return (
+              <select
+                id={id}
+                aria-describedby={describedBy}
+                className="select"
+                value={current.parent_agent_id ?? ''}
+                onChange={(event) => change({ parent_agent_id: event.target.value || null })}
+              >
+                <option value="">Nobody — this agent is at the top</option>
+                {(roster.data ?? [])
+                  .filter((candidate) => !ineligible.has(candidate.id))
+                  .map((candidate) => (
+                    <option key={candidate.id} value={candidate.id}>
+                      {candidate.name}
+                      {candidate.role ? ` — ${candidate.role}` : ''}
+                    </option>
+                  ))}
+              </select>
+            );
+          }}
+        </Field>
 
         <div className="grid grid--three">
           <Field

@@ -16,6 +16,8 @@ These are not mine to make, and picking wrong is expensive later.
 
 ### D-1 — Are Teams a new thing, or are Workspaces already Teams?
 
+> **Answered: Teams are Workspaces.** Recorded as D-017 in `DECISIONS.md`.
+
 Workspaces already exist and already do most of what "teams" describes: an
 Office, Lab, Boardroom or Think Tank is a named group of agents with members
 (`workspaces`, `workspace_members`) that runs sessions.
@@ -33,6 +35,9 @@ exists. A second concept that is 90% the same would be the harder thing to use,
 not the more powerful one.
 
 ### D-2 — What "temperature" should become
+
+> **Answered and shipped in 0.2.0.** The agent form offers *Stay close to the
+> brief · Balanced · Explore alternatives*; the number is kept under Advanced.
 
 You are right that it means nothing here. It is a sampling knob, and on the
 newest models it is not even accepted.
@@ -72,6 +77,24 @@ The structural change. Needs a migration.
   connected model, choosing per step rather than being pinned to one.
 - **Teams are selectable wherever an agent is.** Chat, project, task. Pick
   "Design team" instead of one agent and the orchestrator runs it.
+
+**Done so far:**
+
+- ✅ *Hierarchy.* `agents.parent_agent_id` (migration 3), refused if it would
+  close a loop or point at an agent that does not exist. Deleting a manager
+  frees its reports rather than deleting them. The screen draws a nested tree
+  and the form has a **Reports to** picker that never offers an agent its own
+  reports.
+- ✅ *An orchestrator that delegates to its own team.* Planning now offers the
+  orchestrator only the agents that report to it, rather than everyone in the
+  building. Skipped when it has no reports, so a flat roster behaves exactly
+  as it did.
+
+**Still to do:** picking a team in chat, on a project and on a task; and the
+delegation prompt itself. Per-step model choice already falls out of the tree —
+each agent carries its own connection and model, and a task runs under the
+agent it was assigned, so a plan spread across four agents is already a plan
+spread across up to four models.
 
 *Depends on: D-1, D-2, Phase 1.*
 *Ships as: 0.3.0.*

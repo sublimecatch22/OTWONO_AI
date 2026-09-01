@@ -301,18 +301,38 @@ impl<'a> Orchestrator<'a> {
 
     /// Agents that could be assigned work on this project: the workspace's
     /// members if it has any, otherwise every agent.
+    ///
+    /// Narrowed once more when the orchestrator has reports of its own: an
+    /// orchestrator delegates to its team, not to everyone in the building.
+    /// The narrowing is skipped if it would leave nobody, so an orchestrator
+    /// with an empty team still plans against the workspace rather than
+    /// planning against nothing.
     fn assignable_agents(&self, project: &Project) -> Result<Vec<Agent>> {
         let agents = AgentRepo::new(self.db);
-        if let Some(workspace_id) = &project.workspace_id {
-            let members = WorkspaceRepo::new(self.db).members(workspace_id)?;
-            if !members.is_empty() {
-                return Ok(members
-                    .iter()
-                    .filter_map(|member| agents.get(&member.agent_id).ok().flatten())
-                    .collect());
+        let pool = match &project.workspace_id {
+            Some(workspace_id) => {
+                let members = WorkspaceRepo::new(self.db).members(workspace_id)?;
+                if members.is_empty() {
+                    agents.list(None, false)?
+                } else {
+                    members
+                        .iter()
+                        .filter_map(|member| agents.get(&member.agent_id).ok().flatten())
+                        .collect()
+                }
             }
-        }
-        agents.list(None, false)
+            None => agents.list(None, false)?,
+        };
+
+        let Some(orchestrator_id) = project.orchestrator_agent_id.as_deref() else {
+            return Ok(pool);
+        };
+        let reports: Vec<Agent> = pool
+            .iter()
+            .filter(|agent| agent.parent_agent_id.as_deref() == Some(orchestrator_id))
+            .cloned()
+            .collect();
+        Ok(if reports.is_empty() { pool } else { reports })
     }
 
     /// Execute ready tasks until the project finishes, blocks, or runs out of

@@ -261,6 +261,7 @@ mod tests {
             max_steps: 10,
             timeout_seconds: 60,
             workspace_id: None,
+            parent_agent_id: None,
             version: 1,
             is_template: false,
             template_key: None,
