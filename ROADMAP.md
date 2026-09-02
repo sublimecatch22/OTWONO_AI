@@ -16,6 +16,8 @@ These are not mine to make, and picking wrong is expensive later.
 
 ### D-1 — Are Teams a new thing, or are Workspaces already Teams?
 
+> **Answered: Teams are Workspaces.** Recorded as D-017 in `DECISIONS.md`.
+
 Workspaces already exist and already do most of what "teams" describes: an
 Office, Lab, Boardroom or Think Tank is a named group of agents with members
 (`workspaces`, `workspace_members`) that runs sessions.
@@ -33,6 +35,9 @@ exists. A second concept that is 90% the same would be the harder thing to use,
 not the more powerful one.
 
 ### D-2 — What "temperature" should become
+
+> **Answered and shipped in 0.2.0.** The agent form offers *Stay close to the
+> brief · Balanced · Explore alternatives*; the number is kept under Advanced.
 
 You are right that it means nothing here. It is a sampling knob, and on the
 newest models it is not even accepted.
@@ -72,6 +77,37 @@ The structural change. Needs a migration.
   connected model, choosing per step rather than being pinned to one.
 - **Teams are selectable wherever an agent is.** Chat, project, task. Pick
   "Design team" instead of one agent and the orchestrator runs it.
+
+**Done so far:**
+
+- ✅ *Hierarchy.* `agents.parent_agent_id` (migration 3), refused if it would
+  close a loop or point at an agent that does not exist. Deleting a manager
+  frees its reports rather than deleting them. The screen draws a nested tree
+  and the form has a **Reports to** picker that never offers an agent its own
+  reports.
+- ✅ *An orchestrator that delegates to its own team.* Planning now offers the
+  orchestrator only the agents that report to it, rather than everyone in the
+  building. Skipped when it has no reports, so a flat roster behaves exactly
+  as it did.
+
+- ✅ *A delegation prompt that actually delegates.* The planning prompt listed
+  the team but never asked for a role per task, so a model could name nobody
+  and every task fell back to the orchestrator. It now names the team as a
+  list, requires a role copied from it, says that an invented role is
+  discarded, and says not to pile every task on one person.
+- ✅ *Teams selectable wherever an agent is.* Chat has **Answered by**, a
+  project has **Run by**, and a task row has **Hand it to** — each offering
+  agents and teams, a team resolving to whoever is in charge of it. A team with
+  nobody in charge is shown and disabled with the reason rather than hidden.
+- ✅ *Per-step model choice* needed nothing: each agent carries its own
+  connection and model, and a task runs under the agent it was assigned, so a
+  plan spread across four agents is already spread across up to four models.
+
+**Phase 2 is done.** What is not here, deliberately: chat does not run a
+multi-agent loop. Picking a team in chat means the coordinator answers with the
+team's shared instructions. Several agents actually arguing something out is
+what a Boardroom session already does, and inventing a second engine for it in
+the chat pane would be duplication, not a feature.
 
 *Depends on: D-1, D-2, Phase 1.*
 *Ships as: 0.3.0.*
@@ -231,8 +267,8 @@ well be possible; it is just not possible unilaterally.
 
 | Phase | What | Blocked by | Version |
 |---|---|---|---|
-| 1 | Agents screen: dropdown, real instructions, per-agent model | D-1, D-2 | 0.2.0 |
-| 2 | Agent tree, orchestrator, teams selectable | Phase 1 | 0.3.0 |
+| 1 | Agents screen: dropdown, real instructions, per-agent model ✅ | D-1, D-2 | 0.2.0 |
+| 2 | Agent tree, orchestrator, teams selectable ✅ | Phase 1 | 0.3.0 |
 | 3 | Tasks as a real screen · Relay boundary defined | Phase 2 | 0.4.0 |
 | 4 | Anthropic/OpenAI adapters · your own APIs, permissioned | — | 0.5.0 |
 | 5 | Split panes, floating chats, master broadcast | Phase 2 | 0.6.0 |

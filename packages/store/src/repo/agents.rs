@@ -10,8 +10,8 @@ use crate::Db;
 
 const COLUMNS: &str = "id, name, role, description, icon, system_instructions, \
     provider_connection_id, model, parameters, capabilities, knowledge_source_ids, \
-    memory_scope, approval_policy, max_steps, timeout_seconds, workspace_id, version, \
-    is_template, template_key, created_at, updated_at";
+    memory_scope, approval_policy, max_steps, timeout_seconds, workspace_id, \
+    parent_agent_id, version, is_template, template_key, created_at, updated_at";
 
 fn parse_memory_scope(value: &str) -> MemoryScope {
     match value {
@@ -62,11 +62,12 @@ fn map(row: &Row<'_>) -> rusqlite::Result<Agent> {
         max_steps: row.get::<_, i64>(13)? as u32,
         timeout_seconds: row.get::<_, i64>(14)? as u32,
         workspace_id: row.get(15)?,
-        version: row.get::<_, i64>(16)? as u32,
-        is_template: row.get::<_, i64>(17)? != 0,
-        template_key: row.get(18)?,
-        created_at: crate::parse_ts(&row.get::<_, String>(19)?),
-        updated_at: crate::parse_ts(&row.get::<_, String>(20)?),
+        parent_agent_id: row.get(16)?,
+        version: row.get::<_, i64>(17)? as u32,
+        is_template: row.get::<_, i64>(18)? != 0,
+        template_key: row.get(19)?,
+        created_at: crate::parse_ts(&row.get::<_, String>(20)?),
+        updated_at: crate::parse_ts(&row.get::<_, String>(21)?),
     })
 }
 
@@ -87,6 +88,7 @@ pub struct NewAgent {
     pub max_steps: u32,
     pub timeout_seconds: u32,
     pub workspace_id: Option<String>,
+    pub parent_agent_id: Option<String>,
     pub template_key: Option<String>,
     pub is_template: bool,
 }
@@ -109,6 +111,7 @@ impl Default for NewAgent {
             max_steps: 12,
             timeout_seconds: 120,
             workspace_id: None,
+            parent_agent_id: None,
             template_key: None,
             is_template: false,
         }
@@ -153,8 +156,49 @@ impl<'a> AgentRepo<'a> {
         Ok(())
     }
 
+    /// Refuse a parent that does not exist, is the agent itself, or already
+    /// reports to it directly or through a chain.
+    ///
+    /// A cycle is not a cosmetic problem: the tree is walked to build a
+    /// prompt and to draw the screen, and a loop in it hangs both. The check
+    /// walks upward from the proposed parent, which is bounded by the number
+    /// of agents, and stops the moment it meets the agent being reparented.
+    fn check_parent(&self, agent_id: Option<&str>, parent_id: Option<&str>) -> Result<()> {
+        let Some(parent_id) = parent_id else {
+            return Ok(());
+        };
+        if Some(parent_id) == agent_id {
+            bail!("an agent cannot report to itself");
+        }
+        if self.get(parent_id)?.is_none() {
+            bail!("agent {parent_id} does not exist, so nothing can report to it");
+        }
+        let Some(agent_id) = agent_id else {
+            // A new agent has no id yet, so nothing can point back at it.
+            return Ok(());
+        };
+
+        let mut seen = std::collections::HashSet::new();
+        let mut cursor = Some(parent_id.to_string());
+        while let Some(current) = cursor {
+            if current == agent_id {
+                bail!(
+                    "that would put the agent under one of its own reports, \
+                     and the tree has to stay a tree"
+                );
+            }
+            if !seen.insert(current.clone()) {
+                // Already-broken data. Say so rather than looping forever.
+                bail!("the reporting chain above {parent_id} already contains a loop");
+            }
+            cursor = self.get(&current)?.and_then(|agent| agent.parent_agent_id);
+        }
+        Ok(())
+    }
+
     pub fn create(&self, new: NewAgent) -> Result<Agent> {
         Self::validate(&new)?;
+        self.check_parent(None, new.parent_agent_id.as_deref())?;
         let id = otwono_types::new_id("agt");
         let now = crate::now_str();
         let capability_names: Vec<&str> = new.capabilities.iter().map(|c| c.as_str()).collect();
@@ -162,10 +206,10 @@ impl<'a> AgentRepo<'a> {
             "INSERT INTO agents
                (id, name, role, description, icon, system_instructions, provider_connection_id,
                 model, parameters, capabilities, knowledge_source_ids, memory_scope,
-                approval_policy, max_steps, timeout_seconds, workspace_id, version,
-                is_template, template_key, archived, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, 1,
-                     ?17, ?18, 0, ?19, ?19)",
+                approval_policy, max_steps, timeout_seconds, workspace_id, parent_agent_id,
+                version, is_template, template_key, archived, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17,
+                     1, ?18, ?19, 0, ?20, ?20)",
             params![
                 id,
                 new.name.trim(),
@@ -183,6 +227,7 @@ impl<'a> AgentRepo<'a> {
                 new.max_steps as i64,
                 new.timeout_seconds as i64,
                 new.workspace_id,
+                new.parent_agent_id,
                 new.is_template as i64,
                 new.template_key,
                 now,
@@ -239,6 +284,7 @@ impl<'a> AgentRepo<'a> {
     /// Save an edit. The version counter advances and a snapshot of the *new*
     /// state is recorded so the history can be inspected and restored.
     pub fn update(&self, agent: &Agent, note: Option<&str>) -> Result<Agent> {
+        self.check_parent(Some(&agent.id), agent.parent_agent_id.as_deref())?;
         let capability_names: Vec<&str> = agent.capabilities.iter().map(|c| c.as_str()).collect();
         let next_version = agent.version.saturating_add(1);
         self.db.conn()?.execute(
@@ -246,7 +292,8 @@ impl<'a> AgentRepo<'a> {
                     system_instructions = ?6, provider_connection_id = ?7, model = ?8,
                     parameters = ?9, capabilities = ?10, knowledge_source_ids = ?11,
                     memory_scope = ?12, approval_policy = ?13, max_steps = ?14,
-                    timeout_seconds = ?15, workspace_id = ?16, version = ?17, updated_at = ?18
+                    timeout_seconds = ?15, workspace_id = ?16, parent_agent_id = ?17,
+                    version = ?18, updated_at = ?19
               WHERE id = ?1",
             params![
                 agent.id,
@@ -265,6 +312,7 @@ impl<'a> AgentRepo<'a> {
                 agent.max_steps as i64,
                 agent.timeout_seconds as i64,
                 agent.workspace_id,
+                agent.parent_agent_id,
                 next_version as i64,
                 crate::now_str(),
             ],
@@ -392,6 +440,9 @@ impl<'a> AgentRepo<'a> {
             max_steps: package.max_steps,
             timeout_seconds: package.timeout_seconds,
             workspace_id,
+            // A package carries no ids from the machine that made it, so an
+            // imported agent always arrives as a root.
+            parent_agent_id: None,
             template_key: None,
             is_template: false,
         })
@@ -608,5 +659,85 @@ mod tests {
             })
             .is_err());
         assert!(repo.get_by_template_key("planner").unwrap().is_some());
+    }
+
+    #[test]
+    fn an_agent_can_report_to_another_and_deleting_the_manager_frees_the_reports() {
+        let db = Db::open_in_memory().unwrap();
+        let repo = AgentRepo::new(&db);
+        let boss = repo.create(sample("Orchestrator")).unwrap();
+
+        let mut worker = repo.create(sample("Researcher")).unwrap();
+        assert_eq!(worker.parent_agent_id, None, "a new agent starts as a root");
+        worker.parent_agent_id = Some(boss.id.clone());
+        let worker = repo
+            .update(&worker, Some("reports to the orchestrator"))
+            .unwrap();
+        assert_eq!(worker.parent_agent_id.as_deref(), Some(boss.id.as_str()));
+
+        // Deleting a manager must never delete the people under it.
+        repo.delete(&boss.id).unwrap();
+        let orphan = repo
+            .get(&worker.id)
+            .unwrap()
+            .expect("the report still exists");
+        assert_eq!(
+            orphan.parent_agent_id, None,
+            "it becomes a root, not a casualty"
+        );
+        assert_eq!(orphan.name, "Researcher");
+    }
+
+    #[test]
+    fn an_agent_cannot_report_to_itself() {
+        let db = Db::open_in_memory().unwrap();
+        let repo = AgentRepo::new(&db);
+        let mut agent = repo.create(sample("Alone")).unwrap();
+        agent.parent_agent_id = Some(agent.id.clone());
+        let error = repo.update(&agent, None).unwrap_err().to_string();
+        assert!(error.contains("cannot report to itself"), "{error}");
+    }
+
+    #[test]
+    fn the_tree_cannot_be_bent_into_a_loop() {
+        // The tree is walked to draw the screen and to build a prompt. A cycle
+        // hangs both, so it is refused at the point it would be created.
+        let db = Db::open_in_memory().unwrap();
+        let repo = AgentRepo::new(&db);
+        let top = repo.create(sample("Top")).unwrap();
+
+        let mut middle = repo.create(sample("Middle")).unwrap();
+        middle.parent_agent_id = Some(top.id.clone());
+        let middle = repo.update(&middle, None).unwrap();
+
+        let mut bottom = repo.create(sample("Bottom")).unwrap();
+        bottom.parent_agent_id = Some(middle.id.clone());
+        repo.update(&bottom, None).unwrap();
+
+        // Top now tries to report to Bottom, three links below it.
+        let mut top = repo.get(&top.id).unwrap().unwrap();
+        top.parent_agent_id = Some(bottom.id.clone());
+        let error = repo.update(&top, None).unwrap_err().to_string();
+        assert!(error.contains("has to stay a tree"), "{error}");
+
+        // And the refusal changed nothing.
+        assert_eq!(
+            repo.get(&middle.id)
+                .unwrap()
+                .unwrap()
+                .parent_agent_id
+                .as_deref(),
+            Some(top.id.as_str())
+        );
+    }
+
+    #[test]
+    fn reporting_to_an_agent_that_does_not_exist_is_refused() {
+        let db = Db::open_in_memory().unwrap();
+        let repo = AgentRepo::new(&db);
+        let mut agent = repo.create(sample("Solo")).unwrap();
+        agent.parent_agent_id = Some("agt_nothing".into());
+        let error = repo.update(&agent, None).unwrap_err().to_string();
+        assert!(error.contains("does not exist"), "{error}");
     }
 }

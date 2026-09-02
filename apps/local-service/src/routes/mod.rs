@@ -134,6 +134,10 @@ pub fn api_router() -> Router<AppState> {
             "/projects/{id}/tasks/{task_id}/decision",
             post(projects::decide_task),
         )
+        .route(
+            "/projects/{id}/tasks/{task_id}/assignee",
+            post(projects::reassign_task),
+        )
         .route("/projects/{id}/report", get(projects::report))
         // workspaces
         .route(

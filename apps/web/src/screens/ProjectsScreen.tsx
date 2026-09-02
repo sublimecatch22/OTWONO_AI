@@ -11,6 +11,8 @@ import type {
   ProjectSummary,
   RunReport,
   Task,
+  TaskState,
+  WorkspaceKindDescription,
   WorkspaceSummary,
 } from '../api/types';
 import { Markdown } from '../components/Markdown';
@@ -25,8 +27,17 @@ import {
   TimeAgo,
 } from '../components/primitives';
 import { AssignedAgent } from '../components/AssignedAgent';
+import { answeringFor, choicesFor, valueFor } from '../lib/answering';
 import { ProjectStateBadge, TaskStateBadge } from '../components/StateBadge';
 import { useUi } from '../state/ui';
+
+/**
+ * The task states in which handing the work to somebody else still means
+ * something. Once a task is running, being verified or finished, reassigning
+ * it would either race the run or rewrite what happened; the service refuses
+ * it, and the control is not offered.
+ */
+const REASSIGNABLE: TaskState[] = ['queued', 'ready', 'blocked', 'awaiting_approval'];
 
 export function ProjectsScreen() {
   const navigate = useNavigate();
@@ -200,6 +211,28 @@ export function ProjectDetailScreen() {
     queryFn: () => api.get<WorkspaceSummary[]>('/api/workspaces'),
   });
 
+  const kinds = useQuery({
+    queryKey: ['workspaces', 'kinds'],
+    queryFn: () => api.get<WorkspaceKindDescription[]>('/api/workspaces/kinds'),
+  });
+
+  const reassign = useMutation({
+    mutationFn: ({ taskId, agentId }: { taskId: string; agentId: string | null }) =>
+      api.post<Task>(`/api/projects/${projectId}/tasks/${taskId}/assignee`, {
+        assigned_agent_id: agentId,
+      }),
+    onSuccess: () => invalidate(),
+    onError: (error) =>
+      toast({
+        tone: 'negative',
+        title: 'That task could not be handed over',
+        body: error instanceof ApiError ? error.message : String(error),
+      }),
+  });
+  const kindName = (kind: WorkspaceSummary['kind']) =>
+    (kinds.data ?? []).find((entry) => entry.kind === kind)?.display_name ?? kind;
+  const choices = choicesFor(agents.data ?? [], workspaces.data ?? [], kindName);
+
   const invalidate = () => {
     client.invalidateQueries({ queryKey: ['project', projectId] });
     client.invalidateQueries({ queryKey: ['projects'] });
@@ -341,22 +374,52 @@ export function ProjectDetailScreen() {
 
       <Card title="Settings">
         <div className="grid grid--two">
-          <Field label="Orchestrator">
-            {({ id }) => (
+          <Field
+            label="Run by"
+            hint="One agent, or a team. Choosing a team puts the project in it and hands the planning to whoever is in charge of it."
+          >
+            {({ id, describedBy }) => (
               <select
                 id={id}
+                aria-describedby={describedBy}
                 className="select"
-                value={data.orchestrator_agent_id ?? ''}
-                onChange={(event) =>
-                  updateProject.mutate({ orchestrator_agent_id: event.target.value || null })
-                }
+                value={valueFor(
+                  data.orchestrator_agent_id,
+                  data.workspace_id,
+                  workspaces.data ?? [],
+                )}
+                onChange={(event) => {
+                  const { agentId, workspaceId } = answeringFor(
+                    event.target.value,
+                    workspaces.data ?? [],
+                  );
+                  // A team is a workspace, so picking one sets both. Picking a
+                  // single agent leaves the project's workspace alone: where a
+                  // project lives is not the same question as who runs it.
+                  updateProject.mutate(
+                    workspaceId
+                      ? { orchestrator_agent_id: agentId, workspace_id: workspaceId }
+                      : { orchestrator_agent_id: agentId },
+                  );
+                }}
               >
                 <option value="">Not chosen</option>
-                {(agents.data ?? []).map((agent) => (
-                  <option key={agent.id} value={agent.id}>
-                    {agent.name}
-                  </option>
-                ))}
+                <optgroup label="Agents">
+                  {choices.agents.map((choice) => (
+                    <option key={choice.value} value={choice.value}>
+                      {choice.label}
+                    </option>
+                  ))}
+                </optgroup>
+                {choices.teams.length > 0 && (
+                  <optgroup label="Teams">
+                    {choices.teams.map((choice) => (
+                      <option key={choice.value} value={choice.value} disabled={choice.disabled}>
+                        {choice.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
             )}
           </Field>
@@ -460,6 +523,43 @@ export function ProjectDetailScreen() {
                   assignedId={task.assigned_agent_id}
                   orchestratorId={data.orchestrator_agent_id}
                 />
+                {REASSIGNABLE.includes(task.state) && (
+                  <label className="control">
+                    <span className="control__label">Hand it to</span>
+                    <select
+                      className="select"
+                      value={task.assigned_agent_id ? `agent:${task.assigned_agent_id}` : ''}
+                      onChange={(event) => {
+                        // A task runs under one agent, so choosing a team means
+                        // the agent in charge of it.
+                        const { agentId } = answeringFor(event.target.value, workspaces.data ?? []);
+                        reassign.mutate({ taskId: task.id, agentId });
+                      }}
+                    >
+                      <option value="">Nobody — the orchestrator will do it</option>
+                      <optgroup label="Agents">
+                        {choices.agents.map((choice) => (
+                          <option key={choice.value} value={choice.value}>
+                            {choice.label}
+                          </option>
+                        ))}
+                      </optgroup>
+                      {choices.teams.length > 0 && (
+                        <optgroup label="Teams — whoever is in charge of them">
+                          {choices.teams.map((choice) => (
+                            <option
+                              key={choice.value}
+                              value={choice.value}
+                              disabled={choice.disabled}
+                            >
+                              {choice.label}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                    </select>
+                  </label>
+                )}
                 {task.instructions && <p className="muted">{task.instructions}</p>}
                 {task.acceptance_criteria.length > 0 && (
                   <ul className="muted">

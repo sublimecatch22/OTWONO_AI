@@ -151,3 +151,24 @@ refused by an explicit version check rather than being quietly mangled.
 ignored, and a client sending a field the endpoint dropped in a later version
 gets an error instead of silence. For an API on loopback, driven by the
 interface shipped beside it, a loud failure is worth more than a lenient one.
+
+## D-017 — A team is a workspace, not a second concept
+**Spec reference:** §5 "on conflicting requirements … implement the safest
+reversible interpretation"; roadmap decision D-1.
+**Decision:** "Team" is a word for something that already exists. An Office,
+Lab, Boardroom or Think Tank is a `workspaces` row with `workspace_members`
+and a `coordinator_agent_id`; that is a named roster of agents with somebody in
+charge, which is what a team is. Teams are therefore not a new table, a new
+screen or a new migration — they are a picker over workspaces, and the
+coordinator is the orchestrator.
+**Why:** The alternative was a `teams` table holding a reusable roster that a
+workspace then points at. It buys one thing — the same roster used by several
+workspaces — at the cost of a migration, two overlapping ideas in the
+interface, and a permanent question for the reader of "is this a team or a
+workspace?". Nothing the user asked for needs a roster to be shared: picking a
+team in chat and pointing a team at a project are both selections of something
+that already exists.
+**Cost, accepted:** If reusable rosters are wanted later, they arrive as a new
+concept then, with the benefit of knowing what they are actually for. Adding
+a table later is cheaper than explaining two overlapping ones now.
+**Reversible:** Yes. Nothing is deleted or migrated by this decision.

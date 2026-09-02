@@ -104,6 +104,9 @@ pub struct CreateAgent {
     pub timeout_seconds: u32,
     #[serde(default)]
     pub workspace_id: Option<String>,
+    /// The agent this one reports to. Omitted or null makes it a root.
+    #[serde(default)]
+    pub parent_agent_id: Option<String>,
     /// Start from a shipped template rather than a blank agent.
     #[serde(default)]
     pub from_template: Option<String>,
@@ -165,6 +168,7 @@ pub async fn create(
         max_steps: body.max_steps,
         timeout_seconds: body.timeout_seconds,
         workspace_id: body.workspace_id,
+        parent_agent_id: body.parent_agent_id,
         template_key: None,
         is_template: false,
     };
@@ -221,6 +225,7 @@ pub struct UpdateAgent {
     pub max_steps: Option<u32>,
     pub timeout_seconds: Option<u32>,
     pub workspace_id: Option<Option<String>>,
+    pub parent_agent_id: Option<Option<String>>,
     pub note: Option<String>,
 }
 
@@ -278,6 +283,9 @@ pub async fn update(
     }
     if let Some(value) = body.workspace_id {
         agent.workspace_id = value;
+    }
+    if let Some(value) = body.parent_agent_id {
+        agent.parent_agent_id = value;
     }
 
     let updated = repo
@@ -512,6 +520,7 @@ mod tests {
                 max_steps: default_steps(),
                 timeout_seconds: default_timeout(),
                 workspace_id: None,
+                parent_agent_id: None,
             }),
         )
         .await
@@ -551,6 +560,7 @@ mod tests {
                 max_steps: default_steps(),
                 timeout_seconds: default_timeout(),
                 workspace_id: None,
+                parent_agent_id: None,
             }),
         )
         .await
@@ -586,6 +596,7 @@ mod tests {
                 max_steps: None,
                 timeout_seconds: None,
                 workspace_id: None,
+                parent_agent_id: None,
             }),
         )
         .await
@@ -677,5 +688,120 @@ mod tests {
         .unwrap_err();
         assert!(matches!(error, ApiError::BadRequest(ref m)
             if m.contains("no model connection") && m.contains("agent's settings")));
+    }
+
+    /// Every field of `UpdateAgent` left alone, so a test says only what it
+    /// changes.
+    fn nothing_changed() -> UpdateAgent {
+        UpdateAgent {
+            name: None,
+            role: None,
+            description: None,
+            icon: None,
+            system_instructions: None,
+            provider_connection_id: None,
+            model: None,
+            parameters: None,
+            capabilities: None,
+            knowledge_source_ids: None,
+            memory_scope: None,
+            approval_policy: None,
+            max_steps: None,
+            timeout_seconds: None,
+            workspace_id: None,
+            parent_agent_id: None,
+            note: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn an_agent_can_be_put_under_another_over_the_api() {
+        let state = seeded().await;
+        let repo = AgentRepo::new(&state.db);
+        let boss = repo
+            .get_by_template_key("executive-orchestrator")
+            .unwrap()
+            .unwrap();
+        let worker = repo.get_by_template_key("researcher").unwrap().unwrap();
+        assert_eq!(worker.parent_agent_id, None, "shipped agents start flat");
+
+        let Json(updated) = update(
+            State(state),
+            Path(worker.id.clone()),
+            Json(UpdateAgent {
+                parent_agent_id: Some(Some(boss.id.clone())),
+                ..nothing_changed()
+            }),
+        )
+        .await
+        .unwrap();
+        assert_eq!(updated.parent_agent_id.as_deref(), Some(boss.id.as_str()));
+    }
+
+    #[tokio::test]
+    async fn the_api_refuses_a_reporting_line_that_closes_a_loop() {
+        // The tree is walked to draw the screen and to build a prompt, so a
+        // cycle has to be refused where it would be created, not detected
+        // later by whatever hangs first.
+        let state = seeded().await;
+        let repo = AgentRepo::new(&state.db);
+        let boss = repo
+            .get_by_template_key("executive-orchestrator")
+            .unwrap()
+            .unwrap();
+        let worker = repo.get_by_template_key("researcher").unwrap().unwrap();
+
+        let _ = update(
+            State(state.clone()),
+            Path(worker.id.clone()),
+            Json(UpdateAgent {
+                parent_agent_id: Some(Some(boss.id.clone())),
+                ..nothing_changed()
+            }),
+        )
+        .await
+        .unwrap();
+
+        let error = update(
+            State(state.clone()),
+            Path(boss.id.clone()),
+            Json(UpdateAgent {
+                parent_agent_id: Some(Some(worker.id.clone())),
+                ..nothing_changed()
+            }),
+        )
+        .await
+        .unwrap_err();
+        assert!(
+            matches!(error, ApiError::BadRequest(ref m) if m.contains("has to stay a tree")),
+            "{error:?}"
+        );
+
+        // The refusal left the tree exactly as it was.
+        let boss = AgentRepo::new(&state.db).get(&boss.id).unwrap().unwrap();
+        assert_eq!(boss.parent_agent_id, None);
+    }
+
+    #[tokio::test]
+    async fn an_agent_cannot_be_made_to_report_to_itself_over_the_api() {
+        let state = seeded().await;
+        let agent = AgentRepo::new(&state.db)
+            .get_by_template_key("writer")
+            .unwrap()
+            .unwrap();
+        let error = update(
+            State(state),
+            Path(agent.id.clone()),
+            Json(UpdateAgent {
+                parent_agent_id: Some(Some(agent.id.clone())),
+                ..nothing_changed()
+            }),
+        )
+        .await
+        .unwrap_err();
+        assert!(
+            matches!(error, ApiError::BadRequest(ref m) if m.contains("cannot report to itself")),
+            "{error:?}"
+        );
     }
 }

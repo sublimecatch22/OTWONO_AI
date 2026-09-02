@@ -533,3 +533,73 @@ async fn a_project_with_no_orchestrator_says_what_to_do_about_it() {
         "the message should say where to fix it"
     );
 }
+
+#[tokio::test]
+async fn an_orchestrator_with_reports_plans_against_its_own_team() {
+    // The whole roster is seeded, but only two agents report to the
+    // orchestrator. Those two are the ones it is offered, so it cannot hand
+    // work to somebody outside its team.
+    let db = Db::open_in_memory().unwrap();
+    let project_id = project_with_agents(&db);
+
+    let agents = AgentRepo::new(&db);
+    let boss = agents
+        .get_by_template_key("executive-orchestrator")
+        .unwrap()
+        .unwrap();
+    for key in ["researcher", "writer"] {
+        let mut agent = agents.get_by_template_key(key).unwrap().unwrap();
+        agent.parent_agent_id = Some(boss.id.clone());
+        agents.update(&agent, None).unwrap();
+    }
+
+    let executor = ScriptedExecutor::with_replies(vec![PLAN]);
+    let engine = Orchestrator::new(&db, &executor);
+    let tasks = engine.plan(&project_id).await.unwrap();
+
+    // The plan asked for Research and Writing; both report to it, so both were
+    // assignable and both tasks landed on a real agent.
+    let researcher = agents.get_by_template_key("researcher").unwrap().unwrap();
+    let writer = agents.get_by_template_key("writer").unwrap().unwrap();
+    assert_eq!(
+        tasks[0].assigned_agent_id.as_deref(),
+        Some(researcher.id.as_str())
+    );
+    assert_eq!(
+        tasks[1].assigned_agent_id.as_deref(),
+        Some(writer.id.as_str())
+    );
+
+    // And the prompt it was given named only its own team.
+    let prompt = executor
+        .last_prompt()
+        .expect("the planner was asked something");
+    assert!(prompt.contains("Researcher"), "{prompt}");
+    assert!(
+        !prompt.contains("Budget Reviewer"),
+        "an agent outside the team was offered: {prompt}"
+    );
+}
+
+#[tokio::test]
+async fn an_orchestrator_with_no_reports_still_plans_against_everyone() {
+    // Narrowing to a team must never narrow to nobody: a flat roster is the
+    // normal case and has to keep working exactly as it did.
+    let db = Db::open_in_memory().unwrap();
+    let project_id = project_with_agents(&db);
+
+    let executor = ScriptedExecutor::with_replies(vec![PLAN]);
+    let tasks = Orchestrator::new(&db, &executor)
+        .plan(&project_id)
+        .await
+        .unwrap();
+
+    let researcher = AgentRepo::new(&db)
+        .get_by_template_key("researcher")
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        tasks[0].assigned_agent_id.as_deref(),
+        Some(researcher.id.as_str())
+    );
+}

@@ -28,6 +28,11 @@ pub const MIGRATIONS: &[Migration] = &[
         name: "marketplace_and_account",
         sql: include_str!("../migrations/0002_marketplace_and_account.sql"),
     },
+    Migration {
+        version: 3,
+        name: "agent_hierarchy",
+        sql: include_str!("../migrations/0003_agent_hierarchy.sql"),
+    },
 ];
 
 /// Schema version this binary expects once migrations have run.

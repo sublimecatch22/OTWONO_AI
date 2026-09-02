@@ -135,6 +135,8 @@ export interface Agent {
   max_steps: number;
   timeout_seconds: number;
   workspace_id: string | null;
+  /** The agent this one reports to; null makes it a root of the tree. */
+  parent_agent_id: string | null;
   version: number;
   is_template: boolean;
   template_key: string | null;
