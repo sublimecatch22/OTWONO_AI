@@ -16,9 +16,12 @@ import type {
   ConversationDetail,
   Message,
   SourcesResponse,
+  WorkspaceKindDescription,
+  WorkspaceSummary,
 } from '../api/types';
 import { Markdown } from '../components/Markdown';
 import { Badge, Button, EmptyState, Notice, Spinner, TimeAgo } from '../components/primitives';
+import { answeringFor, choicesFor, valueFor } from '../lib/answering';
 import { useUi } from '../state/ui';
 
 interface RunEvent {
@@ -58,6 +61,14 @@ export function ChatScreen() {
     queryKey: ['knowledge', 'sources'],
     queryFn: () => api.get<SourcesResponse>('/api/knowledge/sources'),
   });
+  const teams = useQuery({
+    queryKey: ['workspaces'],
+    queryFn: () => api.get<WorkspaceSummary[]>('/api/workspaces'),
+  });
+  const kinds = useQuery({
+    queryKey: ['workspaces', 'kinds'],
+    queryFn: () => api.get<WorkspaceKindDescription[]>('/api/workspaces/kinds'),
+  });
 
   const conversation = useQuery({
     queryKey: ['conversation', conversationId],
@@ -81,6 +92,12 @@ export function ChatScreen() {
       client.invalidateQueries({ queryKey: ['conversations', 'sidebar'] });
     },
   });
+
+  // A team is a workspace with somebody in charge, so the picker offers both
+  // and a team resolves to its coordinator.
+  const kindName = (kind: WorkspaceSummary['kind']) =>
+    (kinds.data ?? []).find((entry) => entry.kind === kind)?.display_name ?? kind;
+  const choices = choicesFor(agents.data ?? [], teams.data ?? [], kindName);
 
   const messages = conversation.data?.messages ?? [];
   const streaming = abortRef.current !== null;
@@ -247,20 +264,38 @@ export function ChatScreen() {
 
         <div className="chat__controls">
           <label className="control">
-            <span className="control__label">Agent</span>
+            <span className="control__label">Answered by</span>
             <select
               className="select"
-              value={conversation.data?.agent_id ?? ''}
-              onChange={(event) =>
-                updateConversation.mutate({ agent_id: event.target.value || null })
-              }
+              value={valueFor(
+                conversation.data?.agent_id ?? null,
+                conversation.data?.workspace_id ?? null,
+                teams.data ?? [],
+              )}
+              onChange={(event) => {
+                // A team resolves to the agent that leads it, and the team
+                // comes with it so its shared instructions apply.
+                const { agentId, workspaceId } = answeringFor(event.target.value, teams.data ?? []);
+                updateConversation.mutate({ agent_id: agentId, workspace_id: workspaceId });
+              }}
             >
               <option value="">No agent — plain chat</option>
-              {(agents.data ?? []).map((agent) => (
-                <option key={agent.id} value={agent.id}>
-                  {agent.name}
-                </option>
-              ))}
+              <optgroup label="Agents">
+                {choices.agents.map((choice) => (
+                  <option key={choice.value} value={choice.value}>
+                    {choice.label}
+                  </option>
+                ))}
+              </optgroup>
+              {choices.teams.length > 0 && (
+                <optgroup label="Teams">
+                  {choices.teams.map((choice) => (
+                    <option key={choice.value} value={choice.value} disabled={choice.disabled}>
+                      {choice.label}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
             </select>
           </label>
 

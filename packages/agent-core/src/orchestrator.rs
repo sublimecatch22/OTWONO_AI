@@ -54,19 +54,29 @@ pub fn planning_prompt(project: &Project, available_roles: &[String]) -> String 
             .collect::<Vec<_>>()
             .join("\n")
     };
-    let roles = if available_roles.is_empty() {
-        "(no specialised agents are available; leave suggested_role null)".to_string()
+    let team = if available_roles.is_empty() {
+        "(nobody — you are working alone, so leave suggested_role null on every task)".to_string()
     } else {
-        available_roles.join(", ")
+        available_roles
+            .iter()
+            .map(|role| format!("- {role}"))
+            .collect::<Vec<_>>()
+            .join("\n")
     };
 
     format!(
         "Objective: {}\n\nWhat the user said: {}\n\nAcceptance criteria for the whole project:\n{criteria}\n\n\
-         Roles available to assign work to: {roles}\n\n\
+         Your team. These are the only people you can give work to:\n{team}\n\n\
          Produce a plan as a JSON array and nothing else. Each element:\n\
          {{\"title\": string, \"instructions\": string, \"acceptance_criteria\": [string], \
          \"depends_on\": [integer], \"suggested_role\": string or null, \"requires_approval\": boolean}}\n\n\
          Rules:\n\
+         - `suggested_role` names who does the task. Copy a role from the list above exactly as \
+           written. Use null only when nobody on that list could do it — a role you invent is \
+           discarded and the task falls back to you.\n\
+         - Give the work out. If two people on the list could each do part of this, split it \
+           between them rather than handing everything to one. A plan where every task names the \
+           same role is a to-do list, not a plan.\n\
          - `depends_on` holds 1-based positions of earlier tasks in this array. Leave it empty \
            when a task can start immediately.\n\
          - Set `requires_approval` to true only when the task would send something outside this \
@@ -836,9 +846,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn the_planning_prompt_states_the_shape_and_the_limits() {
-        let project = Project {
+    fn draft_project() -> Project {
+        Project {
             id: "prj_1".into(),
             title: "Quarterly report".into(),
             objective: "Produce the Q3 report".into(),
@@ -853,13 +862,45 @@ mod tests {
             sync_enabled: false,
             created_at: otwono_types::now(),
             updated_at: otwono_types::now(),
-        };
+        }
+    }
+
+    #[test]
+    fn the_planning_prompt_states_the_shape_and_the_limits() {
+        let project = draft_project();
         let prompt = planning_prompt(&project, &["Research (Researcher)".into()]);
         assert!(prompt.contains("Produce the Q3 report"));
         assert!(prompt.contains("Includes revenue"));
         assert!(prompt.contains("Research (Researcher)"));
         assert!(prompt.contains("1-based positions"));
         assert!(prompt.contains(&MAX_PLANNED_TASKS.to_string()));
+    }
+
+    #[test]
+    fn the_planning_prompt_tells_the_orchestrator_to_give_the_work_out() {
+        // Listing the team was not enough: nothing in the prompt asked for a
+        // role per task, so a model could name nobody and every task fell back
+        // to the orchestrator doing it itself.
+        let project = draft_project();
+        let prompt = planning_prompt(
+            &project,
+            &["Research (Researcher)".into(), "Writing (Writer)".into()],
+        );
+        assert!(
+            prompt.contains("- Research (Researcher)"),
+            "the team is a list"
+        );
+        assert!(prompt.contains("- Writing (Writer)"));
+        assert!(prompt.contains("Copy a role from the list above exactly"));
+        assert!(prompt.contains("Give the work out"));
+        assert!(prompt.contains("a role you invent is discarded"));
+    }
+
+    #[test]
+    fn an_orchestrator_with_nobody_to_delegate_to_is_told_so_plainly() {
+        let prompt = planning_prompt(&draft_project(), &[]);
+        assert!(prompt.contains("you are working alone"), "{prompt}");
+        assert!(prompt.contains("leave suggested_role null on every task"));
     }
 
     #[test]

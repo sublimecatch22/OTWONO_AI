@@ -265,6 +265,70 @@ pub async fn add_task(
     Ok(Json(task))
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReassignTask {
+    /// The agent to hand the task to, or null to take it off everyone. Null
+    /// does not mean "nothing happens": an unassigned task falls back to the
+    /// project's orchestrator when the plan runs.
+    pub assigned_agent_id: Option<String>,
+}
+
+/// Hand a task to somebody else.
+///
+/// Only before it has been done. Reassigning a task that is running, being
+/// verified, or already finished would either race the run or rewrite history,
+/// so it is refused with the state that stopped it rather than quietly
+/// ignored.
+pub async fn reassign_task(
+    State(state): State<AppState>,
+    Path((project_id, task_id)): Path<(String, String)>,
+    Json(body): Json<ReassignTask>,
+) -> ApiResult<Json<Task>> {
+    let repo = ProjectRepo::new(&state.db);
+    repo.get(&project_id)?
+        .ok_or_else(|| ApiError::not_found("That project"))?;
+
+    let mut task = repo
+        .get_task(&task_id)?
+        .filter(|task| task.project_id == project_id)
+        .ok_or_else(|| ApiError::not_found("That task"))?;
+
+    if !matches!(
+        task.state,
+        TaskState::Queued | TaskState::Ready | TaskState::Blocked | TaskState::AwaitingApproval
+    ) {
+        return Err(ApiError::Conflict(format!(
+            "\"{}\" is {} and cannot be handed to somebody else.",
+            task.title, task.state
+        )));
+    }
+
+    if let Some(agent_id) = &body.assigned_agent_id {
+        if AgentRepo::new(&state.db).get(agent_id)?.is_none() {
+            return Err(ApiError::BadRequest(
+                "That agent does not exist, so the task cannot be given to it.".into(),
+            ));
+        }
+    }
+
+    task.assigned_agent_id = body.assigned_agent_id;
+    repo.update_task(&task)
+        .map_err(|e| ApiError::BadRequest(e.to_string()))?;
+    let task = repo
+        .get_task(&task.id)?
+        .ok_or_else(|| ApiError::not_found("That task"))?;
+    ActivityRepo::new(&state.db).record(
+        NewActivity::user("task.reassigned")
+            .with_target("task", &task.id)
+            .with_detail(serde_json::json!({
+                "task": task.title,
+                "agent": task.assigned_agent_id,
+            })),
+    )?;
+    Ok(Json(task))
+}
+
 /// Build the executor for a project's orchestrator, or explain why it cannot.
 fn executor_for(state: &AppState, project: &Project) -> ApiResult<ProviderExecutor> {
     let agents = AgentRepo::new(&state.db);
@@ -541,5 +605,140 @@ mod tests {
         let reloaded_second = detail.tasks.iter().find(|t| t.id == second.id).unwrap();
         assert_eq!(reloaded_first.state, TaskState::Ready);
         assert_eq!(reloaded_second.state, TaskState::Queued);
+    }
+
+    /// A project with the shipped agents and one task on it.
+    async fn project_with_a_task(state: &AppState) -> (String, Task) {
+        seed_templates(&state.db).unwrap();
+        let Json(project) = create(
+            State(state.clone()),
+            Json(CreateProject {
+                title: "Quarterly report".into(),
+                objective: "Produce it".into(),
+                acceptance_criteria: vec![],
+                workspace_id: None,
+                orchestrator_agent_id: None,
+                verifier_agent_id: None,
+                max_steps: None,
+                max_task_retries: None,
+            }),
+        )
+        .await
+        .unwrap();
+
+        let Json(task) = add_task(
+            State(state.clone()),
+            Path(project.id.clone()),
+            Json(AddTask {
+                title: "Gather the figures".into(),
+                instructions: String::new(),
+                acceptance_criteria: vec![],
+                assigned_agent_id: None,
+                depends_on: vec![],
+                requires_approval: false,
+            }),
+        )
+        .await
+        .unwrap();
+        (project.id, task)
+    }
+
+    #[tokio::test]
+    async fn a_task_can_be_handed_to_a_different_agent() {
+        let state = AppState::for_tests();
+        let (project_id, task) = project_with_a_task(&state).await;
+        let researcher = AgentRepo::new(&state.db)
+            .get_by_template_key("researcher")
+            .unwrap()
+            .unwrap();
+
+        let Json(reassigned) = reassign_task(
+            State(state.clone()),
+            Path((project_id.clone(), task.id.clone())),
+            Json(ReassignTask {
+                assigned_agent_id: Some(researcher.id.clone()),
+            }),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            reassigned.assigned_agent_id.as_deref(),
+            Some(researcher.id.as_str())
+        );
+
+        // And taken back off again. Nobody assigned is a real choice: the
+        // orchestrator picks it up.
+        let Json(unassigned) = reassign_task(
+            State(state),
+            Path((project_id, task.id)),
+            Json(ReassignTask {
+                assigned_agent_id: None,
+            }),
+        )
+        .await
+        .unwrap();
+        assert_eq!(unassigned.assigned_agent_id, None);
+    }
+
+    #[tokio::test]
+    async fn a_task_that_has_already_been_done_cannot_be_reassigned() {
+        // Rewriting who did finished work would make the activity log a lie.
+        let state = AppState::for_tests();
+        let (project_id, task) = project_with_a_task(&state).await;
+
+        let repo = ProjectRepo::new(&state.db);
+        repo.transition_task(&task.id, TaskState::Running).unwrap();
+        repo.transition_task(&task.id, TaskState::Completed)
+            .unwrap();
+
+        let error = reassign_task(
+            State(state),
+            Path((project_id, task.id)),
+            Json(ReassignTask {
+                assigned_agent_id: None,
+            }),
+        )
+        .await
+        .unwrap_err();
+        assert!(
+            matches!(error, ApiError::Conflict(ref m)
+                if m.contains("Gather the figures") && m.contains("cannot be handed")),
+            "{error:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_task_cannot_be_given_to_an_agent_that_does_not_exist() {
+        let state = AppState::for_tests();
+        let (project_id, task) = project_with_a_task(&state).await;
+        let error = reassign_task(
+            State(state),
+            Path((project_id, task.id)),
+            Json(ReassignTask {
+                assigned_agent_id: Some("agt_nothing".into()),
+            }),
+        )
+        .await
+        .unwrap_err();
+        assert!(
+            matches!(error, ApiError::BadRequest(ref m) if m.contains("does not exist")),
+            "{error:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_task_belonging_to_another_project_is_not_found() {
+        let state = AppState::for_tests();
+        let (_, task) = project_with_a_task(&state).await;
+        let error = reassign_task(
+            State(state),
+            Path(("prj_somewhere_else".into(), task.id)),
+            Json(ReassignTask {
+                assigned_agent_id: None,
+            }),
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(error, ApiError::NotFound(_)), "{error:?}");
     }
 }
