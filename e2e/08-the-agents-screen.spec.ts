@@ -93,7 +93,9 @@ test.describe('the agents screen', () => {
 
     await reportsTo.selectOption({ label: 'Executive Orchestrator (copy) — Coordination' });
     await page.getByRole('button', { name: 'Save changes' }).click();
-    await expect(page.getByText('Saved.', { exact: false })).toBeVisible();
+    // Scoped to the toast: the test console's own description contains the
+    // word "saved" too, and an unscoped match is ambiguous.
+    await expect(page.locator('.toasts').getByText('Saved.', { exact: false })).toBeVisible();
 
     // One fewer root, and the researcher is now inside the orchestrator.
     await expect(roots).toHaveCount(before - 1);
