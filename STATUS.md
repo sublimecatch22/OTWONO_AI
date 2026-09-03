@@ -3,7 +3,7 @@
 What is built, what is not, and what is known to be limited. Updated at the end
 of each phase.
 
-**Version 0.3.0** · Last updated at the end of Phase 6.
+**Version 0.4.0** · Last updated at the end of Phase 6.
 
 ---
 
