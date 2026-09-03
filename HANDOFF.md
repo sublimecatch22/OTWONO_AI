@@ -73,8 +73,8 @@ releases/0.1.0/
 **Windows and macOS installers were not built here.** Tauri's bundlers need each
 platform's own tooling — this is decision D-003, not an oversight. Both are
 scripted (`scripts/build-windows.ps1`) and wired into
-`.github/workflows/release.yml`, which builds all three on a `v*` tag and leaves
-the GitHub release as a draft.
+`.github/workflows/release.yml`, which builds all three when the workflow is
+run from the Actions tab with a version, and publishes the GitHub release.
 
 ## 4. Repository structure
 

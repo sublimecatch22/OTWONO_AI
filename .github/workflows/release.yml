@@ -1,11 +1,11 @@
 name: Release
 
 on:
-  # Two ways in. A tag is the tidier record, but pressing the button in the
-  # Actions tab needs no push rights over `refs/tags/*`: the release step
-  # creates the tag itself, as part of publishing the release.
-  push:
-    tags: ['v*']
+  # One way in, on purpose. Releasing is a deliberate act with a version
+  # attached, so it is a button with a required input rather than a side
+  # effect of pushing a ref. The release step creates the tag itself as part
+  # of publishing, so nothing has to be tagged first and no push rights over
+  # `refs/tags/*` are needed.
   workflow_dispatch:
     inputs:
       version:
@@ -29,7 +29,7 @@ jobs:
         env:
           # Through the environment rather than inlined, so a version string
           # can never be read as part of the script itself.
-          RAW_VERSION: ${{ inputs.version || github.ref_name }}
+          RAW_VERSION: ${{ inputs.version }}
         run: |
           version="${RAW_VERSION#v}"
 
