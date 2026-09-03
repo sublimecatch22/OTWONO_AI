@@ -105,7 +105,11 @@ pub struct WorkspaceMember {
     pub ordinal: u32,
 }
 
-/// The stages a Boardroom or Think Tank session moves through.
+/// The stages a deliberation moves through.
+///
+/// Positions and Critique repeat: each round after the first replaces
+/// Positions with Revision, and Review is where the orchestrator decides
+/// whether to send the team round again.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SessionStage {
@@ -113,6 +117,12 @@ pub enum SessionStage {
     Positions,
     /// Participants challenge each other's assumptions.
     Critique,
+    /// The orchestrator decides whether this is good enough, and if not says
+    /// exactly what is missing.
+    Review,
+    /// Each participant revises its position against what the orchestrator
+    /// said was missing.
+    Revision,
     /// The chair or editor writes the synthesis.
     Synthesis,
     Completed,
@@ -124,16 +134,24 @@ impl SessionStage {
         match self {
             Self::Positions => "positions",
             Self::Critique => "critique",
+            Self::Review => "review",
+            Self::Revision => "revision",
             Self::Synthesis => "synthesis",
             Self::Completed => "completed",
             Self::Failed => "failed",
         }
     }
 
+    /// The stage that follows this one when the deliberation is not going
+    /// round again. Whether it goes round again is the orchestrator's call at
+    /// `Review`, not something a state machine can know, so `Review` points at
+    /// `Synthesis` here and the engine sends it back to `Revision` when the
+    /// orchestrator asks for more.
     pub const fn next(self) -> Option<Self> {
         match self {
-            Self::Positions => Some(Self::Critique),
-            Self::Critique => Some(Self::Synthesis),
+            Self::Positions | Self::Revision => Some(Self::Critique),
+            Self::Critique => Some(Self::Review),
+            Self::Review => Some(Self::Synthesis),
             Self::Synthesis => Some(Self::Completed),
             Self::Completed | Self::Failed => None,
         }
@@ -143,6 +161,8 @@ impl SessionStage {
         match value {
             "positions" => Ok(Self::Positions),
             "critique" => Ok(Self::Critique),
+            "review" => Ok(Self::Review),
+            "revision" => Ok(Self::Revision),
             "synthesis" => Ok(Self::Synthesis),
             "completed" => Ok(Self::Completed),
             "failed" => Ok(Self::Failed),
@@ -166,8 +186,78 @@ pub struct Session {
     pub dissent_summary: Option<String>,
     pub unresolved_questions: Vec<String>,
     pub recommended_decision: Option<String>,
+    /// Which round the deliberation is on, counting from 1.
+    #[serde(default = "one")]
+    pub round: u32,
+    /// The backstop: how many rounds it may run before it stops and reports
+    /// what it has. Not the stopping rule — the orchestrator's judgment is.
+    #[serde(default = "default_max_rounds")]
+    pub max_rounds: u32,
+    /// Why it ended. `None` while it is still running.
+    #[serde(default)]
+    pub outcome: Option<SessionOutcome>,
+    /// What the orchestrator said was still missing, the last time it looked.
+    #[serde(default)]
+    pub outstanding: Vec<String>,
     pub created_at: Timestamp,
     pub updated_at: Timestamp,
+}
+
+fn one() -> u32 {
+    1
+}
+
+/// Three rounds by default: enough for a position, a challenge to it, and a
+/// revision that answers the challenge.
+pub const DEFAULT_MAX_ROUNDS: u32 = 3;
+
+/// Above this a deliberation costs more time than any answer is worth,
+/// especially against a model running on the user's own machine.
+pub const MAX_ROUNDS_CEILING: u32 = 6;
+
+fn default_max_rounds() -> u32 {
+    DEFAULT_MAX_ROUNDS
+}
+
+/// Why a deliberation stopped.
+///
+/// Only `Settled` means the orchestrator was satisfied. A synthesis produced
+/// under either of the others is the best the team had when it ran out of
+/// road, and must never be shown as though it were agreed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionOutcome {
+    /// The orchestrator judged the answer good enough.
+    Settled,
+    /// A round said nothing the round before it had not already said.
+    /// Going again would spend time without buying anything.
+    Stalled,
+    /// It ran out of rounds while the orchestrator still wanted more.
+    BudgetSpent,
+}
+
+impl SessionOutcome {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Settled => "settled",
+            Self::Stalled => "stalled",
+            Self::BudgetSpent => "budget_spent",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "settled" => Some(Self::Settled),
+            "stalled" => Some(Self::Stalled),
+            "budget_spent" => Some(Self::BudgetSpent),
+            _ => None,
+        }
+    }
+
+    /// Whether the result may be described as agreed.
+    pub const fn is_agreed(self) -> bool {
+        matches!(self, Self::Settled)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -186,6 +276,9 @@ pub struct SessionContribution {
     pub agent_id: String,
     pub agent_name: String,
     pub stage: SessionStage,
+    /// Which round this was said in, counting from 1.
+    #[serde(default = "one")]
+    pub round: u32,
     pub content: String,
     pub claim_kind: ClaimKind,
     #[serde(default)]
@@ -207,18 +300,23 @@ mod tests {
     }
 
     #[test]
-    fn sessions_run_positions_then_critique_then_synthesis() {
+    fn a_deliberation_runs_positions_critique_review_then_synthesis() {
         let mut stage = SessionStage::Positions;
         let mut seen = vec![stage];
         while let Some(next) = stage.next() {
             stage = next;
             seen.push(stage);
         }
+        // Review sits between the critique and the write-up: it is where the
+        // orchestrator either accepts the answer or sends the team back to
+        // Revision, which this walk cannot show because it is a judgment
+        // rather than a transition.
         assert_eq!(
             seen,
             vec![
                 SessionStage::Positions,
                 SessionStage::Critique,
+                SessionStage::Review,
                 SessionStage::Synthesis,
                 SessionStage::Completed
             ]
@@ -232,5 +330,44 @@ mod tests {
         assert!(WorkspaceKind::ThinkTank.is_session_based());
         assert!(!WorkspaceKind::Office.is_session_based());
         assert!(!WorkspaceKind::Chat.is_session_based());
+    }
+
+    #[test]
+    fn a_revision_round_rejoins_at_the_critique() {
+        assert_eq!(SessionStage::Revision.next(), Some(SessionStage::Critique));
+    }
+
+    #[test]
+    fn only_a_settled_deliberation_may_be_called_agreed() {
+        assert!(SessionOutcome::Settled.is_agreed());
+        assert!(!SessionOutcome::Stalled.is_agreed());
+        assert!(!SessionOutcome::BudgetSpent.is_agreed());
+    }
+
+    #[test]
+    fn every_outcome_survives_a_trip_through_the_database() {
+        for outcome in [
+            SessionOutcome::Settled,
+            SessionOutcome::Stalled,
+            SessionOutcome::BudgetSpent,
+        ] {
+            assert_eq!(SessionOutcome::parse(outcome.as_str()), Some(outcome));
+        }
+        assert_eq!(SessionOutcome::parse("something else"), None);
+    }
+
+    #[test]
+    fn every_stage_survives_a_trip_through_the_database() {
+        for stage in [
+            SessionStage::Positions,
+            SessionStage::Critique,
+            SessionStage::Review,
+            SessionStage::Revision,
+            SessionStage::Synthesis,
+            SessionStage::Completed,
+            SessionStage::Failed,
+        ] {
+            assert_eq!(SessionStage::parse(stage.as_str()).unwrap(), stage);
+        }
     }
 }

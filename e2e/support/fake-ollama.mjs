@@ -59,6 +59,20 @@ function replyFor(body) {
       },
     ]);
   }
+  if (text.includes('You are running this deliberation')) {
+    // Not good enough the first time, good enough the second. This drives the
+    // loop rather than the happy path: a fake that always says SETTLED would
+    // never prove a second round happens at all.
+    if (text.includes('This is round 1 of')) {
+      return ['VERDICT: MORE WORK NEEDED', 'GAPS:', '- The cost estimate cites no source'].join(
+        '\n',
+      );
+    }
+    return 'VERDICT: SETTLED';
+  }
+  if (text.includes('The person running this has said the following is still missing')) {
+    return 'SOURCED: costs.csv (row 4) puts the estimate at 12k, which answers the gap.';
+  }
   if (text.includes('You are chairing this session')) {
     return [
       '## Synthesis',

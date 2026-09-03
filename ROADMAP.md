@@ -114,6 +114,32 @@ the chat pane would be duplication, not a feature.
 
 ---
 
+## The centre: teams that deliberate
+
+*Asked for after Phase 2, and it changes the order of everything below it.*
+
+The application is for managing teams of agents that work together until the
+answer is as good as it is going to get. That is now its own screen, second in
+the navigation, and any team can do it.
+
+A round is: every agent states a position (or revises one), every agent
+challenges the others, and the orchestrator decides whether that is good
+enough. If not it names what is missing, and the next round is aimed at those
+gaps. It ends when the orchestrator is satisfied, when the same gaps come back
+twice, or when the round budget runs out — and the last two are labelled as
+*not agreed*, with what is still open. Recorded as **D-018**.
+
+**Done:** the loop, the stopping rules, the round budget (three by default,
+six at most), the Deliberations screen, and any team being allowed to run one.
+
+**Not done, and deliberately:** agents do not talk to each other directly —
+every turn goes through the transcript, which is what makes the argument
+readable and auditable. Nor does a deliberation feed a project yet: taking a
+settled answer and turning it into a plan is the obvious next step, and it is
+not built.
+
+---
+
 ## Phase 3 — Tasks become a real screen
 
 Today the Tasks tab redirects to Projects, and a `Task` cannot exist without a
@@ -269,6 +295,7 @@ well be possible; it is just not possible unilaterally.
 |---|---|---|---|
 | 1 | Agents screen: dropdown, real instructions, per-agent model ✅ | D-1, D-2 | 0.2.0 |
 | 2 | Agent tree, orchestrator, teams selectable ✅ | Phase 1 | 0.3.0 |
+| — | **Deliberations: rounds until the orchestrator is satisfied** ✅ | Phase 2 | 0.4.0 |
 | 3 | Tasks as a real screen · Relay boundary defined | Phase 2 | 0.4.0 |
 | 4 | Anthropic/OpenAI adapters · your own APIs, permissioned | — | 0.5.0 |
 | 5 | Split panes, floating chats, master broadcast | Phase 2 | 0.6.0 |

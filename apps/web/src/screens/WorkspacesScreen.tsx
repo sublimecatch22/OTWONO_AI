@@ -152,7 +152,15 @@ export function WorkspaceDetailScreen() {
   });
   const agents = useQuery({ queryKey: ['agents'], queryFn: () => api.get<Agent[]>('/api/agents') });
 
-  const invalidate = () => client.invalidateQueries({ queryKey: ['workspace', workspaceId] });
+  // The team's own page, but also every list that carries its member count:
+  // the sidebar, the workspaces list, and the team picker on the
+  // deliberations screen, which refuses a team of fewer than two. A stale
+  // count there turns "add an agent, now deliberate" into a refusal for a
+  // team that is in fact big enough.
+  const invalidate = () => {
+    client.invalidateQueries({ queryKey: ['workspace', workspaceId] });
+    client.invalidateQueries({ queryKey: ['workspaces'] });
+  };
 
   const addMember = useMutation({
     mutationFn: (input: { agent_id: string; is_coordinator: boolean }) =>

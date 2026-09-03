@@ -1,99 +1,90 @@
-# OTWONO AI 0.3.0
+# OTWONO AI 0.4.0
 
-Agents can now report to one another, and a team can be pointed at work
-anywhere an agent could be. This is Phase 2 of `ROADMAP.md`, whole.
+A team of agents now argues a question out over as many rounds as it takes,
+and the orchestrator decides when the answer is good enough. This is what the
+application is for, so it has its own screen — second in the navigation, after
+Chat.
 
 ---
 
-## A team is a workspace
+## What was already there, and what was missing
 
-The first decision, because everything else depended on it. An Office, Lab,
-Boardroom or Think Tank is already a named roster of agents with somebody in
-charge. That is a team. So there is no `teams` table, no migration for one, and
-no second idea to learn — picking a team is picking a workspace, and its
-coordinator is the one who answers. Recorded as **D-017** in `DECISIONS.md`.
+A session engine ran three stages in a fixed line: every agent states a
+position, every agent critiques the others, the chair writes a synthesis. It
+recorded who said what and kept the dissent rather than smoothing it over.
 
-## Agents report to agents
+That is one round. The chair wrote up whatever came back and never got to say
+*"this is not good enough yet, and here is exactly what is missing."* There was
+no going back and forth and no judgment gate — the part that matters.
 
-`agents.parent_agent_id`, migration 3. Nullable, so every agent you already
-have is untouched: a flat list is a forest of roots.
+## The loop
 
-The agents screen draws a nested tree, and the form has a **Reports to**
-picker. The constraints are where the work went:
+Positions and critique now repeat. At the end of each round the orchestrator
+returns a verdict, and if it is not satisfied it names the gaps; the next round
+asks each agent to revise **against those gaps** rather than start again.
 
-- A parent must exist, and an agent cannot report to itself.
-- **A reporting line that would close a loop is refused where it is created**,
-  by walking up from the proposed parent until it runs out or meets the agent
-  being moved. Not tidiness: the tree is walked to draw the screen and to build
-  a prompt, and a cycle hangs both.
-- **Deleting a manager frees its reports rather than deleting them.** They
-  become roots and keep every other setting.
-- The picker never offers an agent its own reports — the service would refuse
-  it, and offering a choice only to refuse it is worse than not offering it.
-- Anything malformed is flattened, never hidden. An agent whose manager is
-  archived appears at the top; a cycle that somehow reached the database is
-  broken rather than followed. Nothing given to the screen can disappear
-  from it.
+It ends three ways, and they do not mean the same thing:
 
-## The orchestrator delegates to its own team
-
-Two changes, and the second is the one that mattered.
-
-Planning used to offer every agent in the building. It now offers the agents
-that report to the orchestrator — skipped when it has none, so a flat roster
-plans exactly as it did. Narrowing to a team must never narrow to nobody.
-
-And the planning prompt had a hole in it. It listed the available roles and
-then never mentioned them again: nothing asked for a role per task. A model
-could name nobody, every task would fall back to the orchestrator, and the
-result reads exactly like a model refusing to delegate. The prompt now names
-the team as a list, requires a role copied from it exactly, says that an
-invented role is discarded, and says not to hand every task to one person.
-
-## Teams are selectable wherever an agent is
-
-| Where | Control |
+| | |
 |---|---|
-| Chat | **Answered by** |
-| A project | **Run by** |
-| A task row | **Hand it to** |
+| **Settled** | The orchestrator judged the answer good enough to act on. |
+| **Not settled — went in circles** | The same gaps came back two rounds running. The team could not deliver them, and a third attempt would not change that. |
+| **Not settled — ran out of rounds** | Still making progress when the budget ran out. Worth re-running with more rounds. |
 
-Each offers agents and teams. A team resolves to whoever is in charge of it,
-because one agent has to do the work.
+## Why there is a round budget
 
-A team with nobody in charge is offered and **disabled, with the reason in the
-label** — hiding it would read as a missing feature rather than a gap in the
-team. Choosing a team for a project sets its workspace too, since a team is a
-workspace; choosing a single agent leaves the workspace alone, because where a
-project lives is not the same question as who runs it.
+"Until the best result is agreed" is unbounded, and every round is one model
+call per agent plus a critique. On a model running on your own machine, a
+four-agent team at six rounds is tens of minutes. Models also tend to converge
+on *agreeing* rather than on being *right*, so a loop with no stopping rule can
+restate itself indefinitely.
 
-Handing over a task needed an endpoint, so tasks have one. It refuses a task
-that is running, being verified or finished, naming the state that stopped it,
-and the control is not offered on those rows — the refusal is a backstop, not
-the first you hear of it.
+The orchestrator's judgment is the stopping rule. The budget is only the
+backstop: three rounds by default, six at most, chosen when you start one.
 
-## What is deliberately not here
+## A result that did not settle is never shown as agreed
 
-**Chat does not run a multi-agent loop.** Picking a team in chat means the
-coordinator answers, with the team's shared instructions. Several agents
-actually arguing something out is what a **Boardroom session** already does —
-positions, then critique, then a synthesis by the chair. A second engine for
-that inside the chat pane would be duplication, not a feature.
+The chair is told plainly when it is writing up something unsettled, and asked
+not to write it as though the group agreed. The screen labels it and lists what
+is still missing.
 
-**Per-step model choice needed nothing new.** Each agent carries its own
-connection and model, and a task runs under the agent it was assigned, so a
-plan spread across four agents is already spread across up to four models.
+An unparseable verdict counts as **not** settled. Guessing that a model meant
+to stop is how a half-finished answer becomes a finished one — and only that
+direction is unbounded, because the round budget bounds the other.
+
+## Any team can deliberate
+
+This used to be refused to anything but a Boardroom or a Think Tank. The kind
+shapes what the chair is asked to produce; it never decided who was allowed to
+argue, and the restriction was arbitrary. An Office can now argue something
+out like anyone else.
+
+## Two bugs found on the way
+
+**Member counts went stale.** Adding an agent to a team refreshed only that
+team's own page, never the lists carrying its member count. The sidebar showed
+"0 agents" for a team with one, and — because a deliberation needs at least two
+agents — adding an agent and then trying to deliberate was refused for a team
+that was in fact big enough.
+
+**A new tab would have been invisible to you.** The tabs you see are a stored
+list, so a screen added after you first ran the application never appears.
+Migration 4 adds Deliberations to that list once. Hide it afterwards and it
+stays hidden; a preferences row that is not valid JSON is left alone.
 
 ## Please read
 
 - **The installers are unsigned**, and antivirus treats each release as a
   brand-new unknown file. Norton quarantines it on download and again on
   execution; a previous exclusion does not cover this one.
-- **This release changes the database schema** (migration 3). A timestamped
+- **This release changes the database schema** (migration 4). A timestamped
   copy of your database is taken before it runs, into `backups/` beside it.
-- **The agent instructions rewritten in 0.2.0 have still not been judged
-  against a real model**, and neither has the new planning prompt. They are
-  written for one; the test stub cannot tell you whether they work.
+- **A deliberation takes as long as your model does.** Every agent answers in
+  turn, twice a round. Start with two or three agents and two rounds before
+  turning it up.
+- **None of these prompts has been judged against a real model.** The verdict
+  contract, the revision prompt and the agent briefs are written for one; the
+  test stub cannot tell you whether they hold up.
 - **macOS has still never been launched by anyone.**
 - **Marketplace payments are simulated.** Nothing holds or moves money.
 - **No relay is deployed.**
@@ -104,13 +95,13 @@ Full detail in `STATUS.md`. What comes next is in `ROADMAP.md`.
 
 | | |
 |---|---|
-| Rust, 9 crates | 518 tests |
+| Rust, 9 crates | 538 tests |
 | Frontend | 48 |
 | WordPress plugin | 28 |
 | WordPress against a live relay | 6 |
-| End to end, against the real service | 25 |
+| End to end, against the real service | 27 |
 
-Four of the end-to-end tests are new in this release: putting a Researcher
-under an orchestrator and reading the nesting back out, answering a chat as a
-team, a leaderless team shown and refused, and a planned task handed to a
-different agent and then to nobody.
+The two new end-to-end tests drive the loop rather than the happy path: the
+fake runtime **refuses to settle on the first round**, so the test proves a
+second round actually happens and that the orchestrator's stated gap reaches
+the agents revising against it.

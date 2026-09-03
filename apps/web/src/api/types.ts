@@ -216,12 +216,26 @@ export interface WorkspaceKindDescription {
   runs_sessions: boolean;
 }
 
+export type SessionStage =
+  | 'positions'
+  | 'critique'
+  | 'review'
+  | 'revision'
+  | 'synthesis'
+  | 'completed'
+  | 'failed';
+
+/** Why a deliberation stopped. Only `settled` may be called agreed. */
+export type SessionOutcome = 'settled' | 'stalled' | 'budget_spent';
+
 export interface SessionContribution {
   id: string;
   session_id: string;
   agent_id: string;
   agent_name: string;
-  stage: 'positions' | 'critique' | 'synthesis' | 'completed' | 'failed';
+  stage: SessionStage;
+  /** Which round this was said in, counting from 1. */
+  round: number;
   content: string;
   claim_kind: 'sourced' | 'speculation';
   citations: Citation[];
@@ -232,14 +246,28 @@ export interface Session {
   id: string;
   workspace_id: string;
   question: string;
-  stage: 'positions' | 'critique' | 'synthesis' | 'completed' | 'failed';
+  stage: SessionStage;
   chair_agent_id: string | null;
   synthesis: string | null;
   dissent_summary: string | null;
   unresolved_questions: string[];
   recommended_decision: string | null;
+  /** Which round it is on, counting from 1. */
+  round: number;
+  /** The backstop. The orchestrator's judgment is the stopping rule. */
+  max_rounds: number;
+  /** Null while it is still running. */
+  outcome: SessionOutcome | null;
+  /** What the orchestrator said was still missing, last time it looked. */
+  outstanding: string[];
   created_at: string;
   updated_at: string;
+}
+
+export interface DeliberationSummary extends Session {
+  workspace_name: string;
+  workspace_kind: string;
+  member_count: number;
 }
 
 export interface SessionDetail extends Session {

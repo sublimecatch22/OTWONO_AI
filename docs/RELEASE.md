@@ -90,15 +90,17 @@ server-rendered — so the ZIP is exactly what runs.
 
 ## The GitHub Actions workflow
 
-`.github/workflows/release.yml` can be started two ways, and does the same
-thing either way.
+`.github/workflows/release.yml` is started one way: *Actions → Release → Run
+workflow*, giving it a version such as `0.1.0`. A leading `v` is optional.
 
-**From the Actions tab.** *Actions → Release → Run workflow*, and give it a
-version such as `0.1.0`. Nothing has to be tagged first: the release step
-creates the tag as it publishes the release, against the commit the run
-started from. This is the route to use when you cannot push to `refs/tags/*`.
+Nothing has to be tagged first. The release step creates the tag as it
+publishes the release, against the commit the run started from, so no push
+rights over `refs/tags/*` are needed.
 
-**By pushing a tag** matching `v*`, if you would rather the tag came first.
+There is deliberately no tag-push trigger. Releasing is a deliberate act with
+a version attached, and a version typed into a box is checked against all nine
+files that state one before anything is built; a pushed ref is not a decision
+to release, and a stray `v*` tag should not start one.
 
 | Job | Runner | Produces |
 |---|---|---|

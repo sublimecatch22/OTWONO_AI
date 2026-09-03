@@ -304,6 +304,10 @@ pub struct CreateSession {
     pub question: String,
     #[serde(default)]
     pub chair_agent_id: Option<String>,
+    /// How many rounds it may run before it stops and reports what it has.
+    /// Omitted means the default; the store refuses anything outside 1..=6.
+    #[serde(default)]
+    pub max_rounds: Option<u32>,
 }
 
 pub async fn create_session(
@@ -315,7 +319,12 @@ pub async fn create_session(
         return Err(ApiError::BadRequest("A session needs a question.".into()));
     }
     WorkspaceRepo::new(&state.db)
-        .create_session(&id, body.question.trim(), body.chair_agent_id.as_deref())
+        .create_session(
+            &id,
+            body.question.trim(),
+            body.chair_agent_id.as_deref(),
+            body.max_rounds,
+        )
         .map(Json)
         .map_err(|e| ApiError::BadRequest(e.to_string()))
 }
@@ -339,6 +348,49 @@ pub async fn get_session(
         contributions: repo.contributions(&session_id)?,
         session,
     }))
+}
+
+/// One deliberation in a list, with enough of its team to be readable
+/// without a second request.
+#[derive(Debug, Serialize)]
+pub struct DeliberationSummary {
+    #[serde(flatten)]
+    pub session: Session,
+    pub workspace_name: String,
+    pub workspace_kind: String,
+    /// How many agents are on the team, so a team too small to argue is
+    /// visible before the run rather than as an error afterwards.
+    pub member_count: usize,
+}
+
+/// Every deliberation on every team, newest first.
+pub async fn list_deliberations(
+    State(state): State<AppState>,
+) -> ApiResult<Json<Vec<DeliberationSummary>>> {
+    let repo = WorkspaceRepo::new(&state.db);
+    let mut out = Vec::new();
+    for session in repo.all_sessions(200)? {
+        // A team deleted out from under a deliberation leaves the record
+        // behind; say so rather than dropping it from the list.
+        let workspace = repo.get(&session.workspace_id)?;
+        let member_count = repo
+            .members(&session.workspace_id)
+            .map(|m| m.len())
+            .unwrap_or(0);
+        out.push(DeliberationSummary {
+            workspace_name: workspace
+                .as_ref()
+                .map(|w| w.name.clone())
+                .unwrap_or_else(|| "a team that no longer exists".to_string()),
+            workspace_kind: workspace
+                .as_ref()
+                .map(|w| w.kind.as_str().to_string())
+                .unwrap_or_default(),
+            member_count,
+            session,
+        });
+    }
+    Ok(Json(out))
 }
 
 fn executor(state: &AppState) -> ApiResult<ProviderExecutor> {
@@ -462,8 +514,10 @@ mod tests {
         assert!(kinds.iter().all(|k| k.purpose.ends_with('.')));
     }
 
+    /// An Office deliberates like any other team now. The kind shapes what the
+    /// chair is asked to produce; it does not decide who is allowed to argue.
     #[tokio::test]
-    async fn a_session_cannot_be_created_in_an_office() {
+    async fn an_office_can_deliberate_like_any_other_team() {
         let state = AppState::for_tests();
         let Json(office) = create(
             State(state.clone()),
@@ -479,18 +533,37 @@ mod tests {
         .await
         .unwrap();
 
+        let Json(session) = create_session(
+            State(state.clone()),
+            Path(office.id.clone()),
+            Json(CreateSession {
+                question: "Ship?".into(),
+                chair_agent_id: None,
+                max_rounds: None,
+            }),
+        )
+        .await
+        .unwrap();
+        assert_eq!(session.max_rounds, 3, "the default round budget");
+        assert_eq!(session.round, 1);
+        assert_eq!(session.outcome, None);
+
+        // The budget is bounded, and the refusal says the range.
         let error = create_session(
             State(state),
             Path(office.id),
             Json(CreateSession {
                 question: "Ship?".into(),
                 chair_agent_id: None,
+                max_rounds: Some(99),
             }),
         )
         .await
         .unwrap_err();
-        assert!(matches!(error, ApiError::BadRequest(ref m)
-            if m.contains("do not run structured sessions")));
+        assert!(
+            matches!(error, ApiError::BadRequest(ref m) if m.contains("between 1 and 6")),
+            "{error:?}"
+        );
     }
 
     #[tokio::test]

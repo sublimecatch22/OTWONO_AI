@@ -172,3 +172,35 @@ that already exists.
 concept then, with the benefit of knowing what they are actually for. Adding
 a table later is cheaper than explaining two overlapping ones now.
 **Reversible:** Yes. Nothing is deleted or migrated by this decision.
+
+## D-018 — A deliberation runs rounds, and only the orchestrator ends it
+**Spec reference:** §5 "prioritise security and data integrity"; §2 "do not
+pretend something worked when it did not"; the orchestration rule that nothing
+loops without a budget.
+**Decision:** A session is no longer three stages in a fixed line. Positions
+and critique repeat, and at the end of each round the orchestrator returns
+either SETTLED or MORE WORK NEEDED with named gaps; the next round is aimed at
+those gaps. It ends when the orchestrator is satisfied (`settled`), when the
+same gaps come back two rounds running (`stalled`), or when the round budget
+runs out (`budget_spent`). Default three rounds, ceiling six.
+**Why a budget at all:** "until the best result is agreed" is unbounded, and
+every round is one model call per agent plus a critique. On a local model a
+four-agent team at six rounds is tens of minutes. Worse, models converge on
+agreeing rather than on being right, so a loop with no stopping rule can
+restate itself indefinitely. The orchestrator's judgment is the stopping rule;
+the budget is only the backstop.
+**Why "stalled" is separate from "budget spent":** they mean different things
+to the reader. Stalled says the team could not deliver what was asked twice
+over — going again would not help. Budget spent says it was still making
+progress and ran out of road, which is worth re-running with more rounds.
+**What must never happen:** a result that did not settle being shown as
+agreed. `SessionOutcome::is_agreed()` is true only for `settled`; the chair is
+told plainly when it is writing up something unsettled, and the interface
+labels it and lists what is still missing.
+**Unparseable verdicts count as not settled.** Guessing that a model meant to
+stop is how a half-finished answer becomes a finished one. The budget bounds
+the cost of being wrong in that direction; nothing bounds the cost of being
+wrong in the other.
+**Also:** any team may now deliberate, not only a Boardroom or a Think Tank.
+The kind shapes what the chair is asked to produce; it never decided who was
+allowed to argue, and the restriction was arbitrary.

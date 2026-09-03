@@ -33,6 +33,11 @@ pub const MIGRATIONS: &[Migration] = &[
         name: "agent_hierarchy",
         sql: include_str!("../migrations/0003_agent_hierarchy.sql"),
     },
+    Migration {
+        version: 4,
+        name: "deliberation_rounds",
+        sql: include_str!("../migrations/0004_deliberation_rounds.sql"),
+    },
 ];
 
 /// Schema version this binary expects once migrations have run.
@@ -329,5 +334,108 @@ mod tests {
             err.to_string().to_lowercase().contains("constraint"),
             "{err}"
         );
+    }
+
+    /// Apply migrations 1..=`upto` by hand, so a test can sit at an older
+    /// schema and then upgrade across the migration it cares about.
+    fn at_version(conn: &mut Connection, upto: i64) {
+        ensure_migrations_table(conn).unwrap();
+        for migration in MIGRATIONS.iter().filter(|m| m.version <= upto) {
+            let tx = conn.transaction().unwrap();
+            tx.execute_batch(migration.sql).unwrap();
+            tx.execute(
+                "INSERT INTO schema_migrations (version, name, applied_at)
+                 VALUES (?1, ?2, '2026-01-01T00:00:00Z')",
+                rusqlite::params![migration.version, migration.name],
+            )
+            .unwrap();
+            tx.commit().unwrap();
+        }
+    }
+
+    fn visible_tabs(conn: &Connection) -> Vec<String> {
+        let raw: String = conn
+            .query_row(
+                "SELECT value FROM settings WHERE key='preferences'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        parsed["visible_tabs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap().to_string())
+            .collect()
+    }
+
+    #[test]
+    fn an_existing_user_is_shown_the_deliberations_tab() {
+        // A screen added after someone first ran the application is invisible
+        // to them for ever unless it is put into their stored tab list.
+        let mut conn = Connection::open_in_memory().unwrap();
+        at_version(&mut conn, 3);
+        conn.execute(
+            "INSERT INTO settings (key, value, updated_at)
+             VALUES ('preferences', ?1, '2026-01-01T00:00:00Z')",
+            [r#"{"visible_tabs":["chat","projects","settings"],"theme":"dark"}"#],
+        )
+        .unwrap();
+
+        migrate(&mut conn, None, None).unwrap();
+
+        let tabs = visible_tabs(&conn);
+        assert!(tabs.contains(&"deliberations".to_string()), "{tabs:?}");
+        // Nothing else was disturbed.
+        assert!(tabs.contains(&"chat".to_string()));
+        assert!(tabs.contains(&"projects".to_string()));
+        assert!(tabs.contains(&"settings".to_string()));
+    }
+
+    #[test]
+    fn the_deliberations_tab_is_not_added_twice() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        at_version(&mut conn, 3);
+        conn.execute(
+            "INSERT INTO settings (key, value, updated_at)
+             VALUES ('preferences', ?1, '2026-01-01T00:00:00Z')",
+            [r#"{"visible_tabs":["chat","deliberations","settings"]}"#],
+        )
+        .unwrap();
+
+        migrate(&mut conn, None, None).unwrap();
+
+        let tabs = visible_tabs(&conn);
+        assert_eq!(
+            tabs.iter().filter(|t| *t == "deliberations").count(),
+            1,
+            "{tabs:?}"
+        );
+    }
+
+    #[test]
+    fn preferences_that_are_not_json_survive_the_upgrade_untouched() {
+        // A row that is not the shape we expect must be left alone rather than
+        // rewritten into something the application then cannot read.
+        let mut conn = Connection::open_in_memory().unwrap();
+        at_version(&mut conn, 3);
+        conn.execute(
+            "INSERT INTO settings (key, value, updated_at)
+             VALUES ('preferences', 'not json at all', '2026-01-01T00:00:00Z')",
+            [],
+        )
+        .unwrap();
+
+        migrate(&mut conn, None, None).unwrap();
+
+        let raw: String = conn
+            .query_row(
+                "SELECT value FROM settings WHERE key='preferences'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(raw, "not json at all");
     }
 }
