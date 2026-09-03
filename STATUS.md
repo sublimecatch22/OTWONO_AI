@@ -13,11 +13,11 @@ Every number here comes from a run, not an estimate.
 
 | Suite | Command | Result |
 |---|---|---|
-| Rust — 9 crates | `cargo test --workspace` | **518 passing** |
+| Rust — 9 crates | `cargo test --workspace` | **538 passing** |
 | Frontend | `npm run test` | **48 passing** |
 | WordPress plugin | `php wordpress/tests/run-tests.php` | **28 passing** |
 | WordPress against a live relay | `./scripts/run-wordpress-live-tests.sh` | **6 passing** |
-| End to end | `npx playwright test` | **25 passing** |
+| End to end | `npx playwright test` | **27 passing** |
 | Lints | `cargo clippy --workspace --all-targets -- -D warnings` | Clean |
 | Formatting | `cargo fmt --check`, `npm run format:check` | Clean |
 | Types | `npm run typecheck` | Clean |

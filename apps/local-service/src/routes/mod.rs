@@ -157,6 +157,7 @@ pub fn api_router() -> Router<AppState> {
             "/workspaces/{id}/members/{agent_id}",
             delete(workspaces::remove_member),
         )
+        .route("/deliberations", get(workspaces::list_deliberations))
         .route(
             "/workspaces/{id}/sessions",
             post(workspaces::create_session),

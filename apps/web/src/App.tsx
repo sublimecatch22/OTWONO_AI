@@ -9,6 +9,7 @@ import { ActivityScreen } from './screens/ActivityScreen';
 import { AgentsScreen } from './screens/AgentsScreen';
 import { ChatScreen } from './screens/ChatScreen';
 import { ConnectionsScreen } from './screens/ConnectionsScreen';
+import { DeliberationsScreen } from './screens/DeliberationsScreen';
 import { KnowledgeScreen } from './screens/KnowledgeScreen';
 import { MarketplaceScreen } from './screens/MarketplaceScreen';
 import { ProjectDetailScreen, ProjectsScreen } from './screens/ProjectsScreen';
@@ -65,6 +66,7 @@ export function App() {
           <Route path="/" element={<Navigate to="/chat" replace />} />
           <Route path="/chat" element={<ChatScreen />} />
           <Route path="/chat/:conversationId" element={<ChatScreen />} />
+          <Route path="/deliberations" element={<DeliberationsScreen />} />
           <Route path="/projects" element={<ProjectsScreen />} />
           <Route path="/projects/:projectId" element={<ProjectDetailScreen />} />
           <Route path="/agents" element={<AgentsScreen />} />

@@ -6,8 +6,8 @@ use rusqlite::{params, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 
 use otwono_types::workspace::{
-    ClaimKind, Session, SessionContribution, SessionStage, Workspace, WorkspaceKind,
-    WorkspaceMember,
+    ClaimKind, Session, SessionContribution, SessionOutcome, SessionStage, Workspace,
+    WorkspaceKind, WorkspaceMember,
 };
 
 use crate::Db;
@@ -283,27 +283,38 @@ impl<'a> WorkspaceRepo<'a> {
 
     // ---- sessions
 
+    /// Open a deliberation on a team.
+    ///
+    /// Any team may deliberate. The Boardroom and Think Tank kinds shape what
+    /// the chair is asked to produce, but a group of agents arguing towards an
+    /// answer is what this application is for, and refusing it to an Office
+    /// was an arbitrary line.
     pub fn create_session(
         &self,
         workspace_id: &str,
         question: &str,
         chair_agent_id: Option<&str>,
+        max_rounds: Option<u32>,
     ) -> Result<Session> {
-        let workspace = self
-            .get(workspace_id)?
+        self.get(workspace_id)?
             .ok_or_else(|| anyhow::anyhow!("workspace {workspace_id} does not exist"))?;
-        if !workspace.kind.is_session_based() {
+
+        let max_rounds = max_rounds.unwrap_or(otwono_types::workspace::DEFAULT_MAX_ROUNDS);
+        if max_rounds == 0 || max_rounds > otwono_types::workspace::MAX_ROUNDS_CEILING {
             bail!(
-                "{} workspaces do not run structured sessions",
-                workspace.kind.display_name()
+                "a deliberation runs between 1 and {} rounds",
+                otwono_types::workspace::MAX_ROUNDS_CEILING
             );
         }
+
         let id = otwono_types::new_id("ses");
         let now = crate::now_str();
         self.db.conn()?.execute(
-            "INSERT INTO sessions (id, workspace_id, question, stage, chair_agent_id, created_at, updated_at)
-             VALUES (?1, ?2, ?3, 'positions', ?4, ?5, ?5)",
-            params![id, workspace_id, question, chair_agent_id, now],
+            "INSERT INTO sessions
+               (id, workspace_id, question, stage, chair_agent_id, round, max_rounds,
+                created_at, updated_at)
+             VALUES (?1, ?2, ?3, 'positions', ?4, 1, ?5, ?6, ?6)",
+            params![id, workspace_id, question, chair_agent_id, max_rounds, now],
         )?;
         self.get_session(&id)?
             .ok_or_else(|| anyhow::anyhow!("session not found after creation"))
@@ -315,7 +326,7 @@ impl<'a> WorkspaceRepo<'a> {
             .query_row(
                 "SELECT id, workspace_id, question, stage, chair_agent_id, synthesis,
                         dissent_summary, unresolved_questions, recommended_decision,
-                        created_at, updated_at
+                        round, max_rounds, outcome, outstanding, created_at, updated_at
                    FROM sessions WHERE id = ?1",
                 [id],
                 |row| {
@@ -330,8 +341,14 @@ impl<'a> WorkspaceRepo<'a> {
                         dissent_summary: row.get(6)?,
                         unresolved_questions: crate::json_column(row.get(7)?),
                         recommended_decision: row.get(8)?,
-                        created_at: crate::parse_ts(&row.get::<_, String>(9)?),
-                        updated_at: crate::parse_ts(&row.get::<_, String>(10)?),
+                        round: row.get::<_, i64>(9)? as u32,
+                        max_rounds: row.get::<_, i64>(10)? as u32,
+                        outcome: row
+                            .get::<_, Option<String>>(11)?
+                            .and_then(|value| SessionOutcome::parse(&value)),
+                        outstanding: crate::json_column(row.get(12)?),
+                        created_at: crate::parse_ts(&row.get::<_, String>(13)?),
+                        updated_at: crate::parse_ts(&row.get::<_, String>(14)?),
                     })
                 },
             )
@@ -352,11 +369,29 @@ impl<'a> WorkspaceRepo<'a> {
             .collect()
     }
 
+    /// Every deliberation on every team, newest first.
+    ///
+    /// The screen that shows these is the front door of the application, so
+    /// it cannot be a per-team query the way the workspace detail page is.
+    pub fn all_sessions(&self, limit: u32) -> Result<Vec<Session>> {
+        let conn = self.db.conn()?;
+        let mut stmt = conn.prepare("SELECT id FROM sessions ORDER BY created_at DESC LIMIT ?1")?;
+        let ids: Vec<String> = stmt
+            .query_map([limit as i64], |r| r.get(0))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        drop(stmt);
+        drop(conn);
+        ids.iter()
+            .filter_map(|id| self.get_session(id).transpose())
+            .collect()
+    }
+
     pub fn update_session(&self, session: &Session) -> Result<()> {
         self.db.conn()?.execute(
             "UPDATE sessions SET stage = ?2, chair_agent_id = ?3, synthesis = ?4,
                     dissent_summary = ?5, unresolved_questions = ?6,
-                    recommended_decision = ?7, updated_at = ?8
+                    recommended_decision = ?7, round = ?8, max_rounds = ?9,
+                    outcome = ?10, outstanding = ?11, updated_at = ?12
               WHERE id = ?1",
             params![
                 session.id,
@@ -366,6 +401,10 @@ impl<'a> WorkspaceRepo<'a> {
                 session.dissent_summary,
                 crate::to_json(&session.unresolved_questions),
                 session.recommended_decision,
+                session.round as i64,
+                session.max_rounds as i64,
+                session.outcome.map(|o| o.as_str()),
+                crate::to_json(&session.outstanding),
                 crate::now_str(),
             ],
         )?;
@@ -378,6 +417,7 @@ impl<'a> WorkspaceRepo<'a> {
         agent_id: &str,
         agent_name: &str,
         stage: SessionStage,
+        round: u32,
         content: &str,
         claim_kind: ClaimKind,
         citations: &[otwono_types::chat::Citation],
@@ -392,14 +432,16 @@ impl<'a> WorkspaceRepo<'a> {
         let now = crate::now_str();
         conn.execute(
             "INSERT INTO session_contributions
-               (id, session_id, agent_id, agent_name, stage, content, claim_kind, citations, ordinal, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+               (id, session_id, agent_id, agent_name, stage, round, content, claim_kind,
+                citations, ordinal, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             params![
                 id,
                 session_id,
                 agent_id,
                 agent_name,
                 stage.as_str(),
+                round as i64,
                 content,
                 match claim_kind {
                     ClaimKind::Sourced => "sourced",
@@ -416,6 +458,7 @@ impl<'a> WorkspaceRepo<'a> {
             agent_id: agent_id.into(),
             agent_name: agent_name.into(),
             stage,
+            round,
             content: content.into(),
             claim_kind,
             citations: citations.to_vec(),
@@ -426,7 +469,8 @@ impl<'a> WorkspaceRepo<'a> {
     pub fn contributions(&self, session_id: &str) -> Result<Vec<SessionContribution>> {
         let conn = self.db.conn()?;
         let mut stmt = conn.prepare(
-            "SELECT id, session_id, agent_id, agent_name, stage, content, claim_kind, citations, created_at
+            "SELECT id, session_id, agent_id, agent_name, stage, round, content, claim_kind,
+                    citations, created_at
                FROM session_contributions WHERE session_id = ?1 ORDER BY ordinal",
         )?;
         let rows = stmt.query_map([session_id], |row| {
@@ -437,14 +481,15 @@ impl<'a> WorkspaceRepo<'a> {
                 agent_name: row.get(3)?,
                 stage: SessionStage::parse(&row.get::<_, String>(4)?)
                     .unwrap_or(SessionStage::Positions),
-                content: row.get(5)?,
-                claim_kind: if row.get::<_, String>(6)? == "sourced" {
+                round: row.get::<_, i64>(5)? as u32,
+                content: row.get(6)?,
+                claim_kind: if row.get::<_, String>(7)? == "sourced" {
                     ClaimKind::Sourced
                 } else {
                     ClaimKind::Speculation
                 },
-                citations: crate::json_column(row.get(7)?),
-                created_at: crate::parse_ts(&row.get::<_, String>(8)?),
+                citations: crate::json_column(row.get(8)?),
+                created_at: crate::parse_ts(&row.get::<_, String>(9)?),
             })
         })?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
@@ -647,27 +692,29 @@ mod tests {
     }
 
     #[test]
-    fn only_boardrooms_and_think_tanks_accept_sessions() {
+    fn any_team_can_deliberate() {
+        // This used to refuse anything but a Boardroom or a Think Tank. A
+        // group of agents arguing towards an answer is what the application is
+        // for, and the kind only shapes what the chair is asked to produce.
         let db = Db::open_in_memory().unwrap();
         let repo = WorkspaceRepo::new(&db);
-        let office = repo
-            .create(NewWorkspace::named(WorkspaceKind::Office, "Ops"))
-            .unwrap();
-        let err = repo
-            .create_session(&office.id, "Should we ship?", None)
-            .unwrap_err();
-        assert!(
-            err.to_string().contains("do not run structured sessions"),
-            "{err}"
-        );
-
-        let board = repo
-            .create(NewWorkspace::named(WorkspaceKind::Boardroom, "Board"))
-            .unwrap();
-        let session = repo
-            .create_session(&board.id, "Should we ship?", None)
-            .unwrap();
-        assert_eq!(session.stage, SessionStage::Positions);
+        for kind in [
+            WorkspaceKind::Office,
+            WorkspaceKind::Lab,
+            WorkspaceKind::Boardroom,
+            WorkspaceKind::ThinkTank,
+        ] {
+            let workspace = repo
+                .create(NewWorkspace::named(kind, kind.display_name()))
+                .unwrap();
+            let session = repo
+                .create_session(&workspace.id, "Should we ship?", None, None)
+                .unwrap();
+            assert_eq!(session.stage, SessionStage::Positions);
+            assert_eq!(session.round, 1);
+            assert_eq!(session.max_rounds, 3, "the default round budget");
+            assert_eq!(session.outcome, None, "nothing has been decided yet");
+        }
     }
 
     #[test]
@@ -679,7 +726,7 @@ mod tests {
             .create(NewWorkspace::named(WorkspaceKind::Boardroom, "Board"))
             .unwrap();
         let mut session = repo
-            .create_session(&board.id, "Ship on Friday?", Some("agt_chair"))
+            .create_session(&board.id, "Ship on Friday?", Some("agt_chair"), None)
             .unwrap();
 
         repo.add_contribution(
@@ -687,6 +734,7 @@ mod tests {
             "agt_1",
             "Security",
             SessionStage::Positions,
+            1,
             "Not until the audit closes.",
             ClaimKind::Sourced,
             &[],
@@ -697,6 +745,7 @@ mod tests {
             "agt_2",
             "Delivery",
             SessionStage::Positions,
+            1,
             "Friday is feasible.",
             ClaimKind::Speculation,
             &[],
